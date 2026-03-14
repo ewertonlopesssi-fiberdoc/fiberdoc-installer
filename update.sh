@@ -1,66 +1,147 @@
 #!/bin/bash
-# =============================================================================
-# FiberDoc — Script de Atualização
-# Uso: sudo bash update.sh
-# =============================================================================
+# ============================================================
+# FiberDoc — Script de Atualização Automática
+# URL permanente (sempre atualiza para a versão mais recente):
+#
+#   curl -fsSL https://raw.githubusercontent.com/ewertonlopesssi-fiberdoc/fiberdoc-installer/main/update.sh | bash
+#
+# ============================================================
 set -e
 
-FIBERDOC_DIR="/opt/fiberdoc"
-SERVICE_NAME="fiberdoc"
-BACKUP_DIR="$FIBERDOC_DIR/backups/update-$(date +%Y%m%d-%H%M%S)"
+REPO="ewertonlopesssi-fiberdoc/fiberdoc-installer"
+APP_DIR="/opt/fiberdoc"
+TMP_DIR="/tmp/fiberdoc-update-$$"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
-info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
-success() { echo -e "${GREEN}[OK]${NC} $1"; }
-warn()    { echo -e "${YELLOW}[AVISO]${NC} $1"; }
-error()   { echo -e "${RED}[ERRO]${NC} $1"; exit 1; }
+# ── Cores ────────────────────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-[[ $EUID -ne 0 ]] && error "Execute como root: sudo bash update.sh"
+log()  { echo -e "${GREEN}[✓]${NC} $1"; }
+info() { echo -e "${CYAN}[i]${NC} $1"; }
+warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+err()  { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
 echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║              FiberDoc — Atualização de Versão            ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+echo -e "${BOLD}╔══════════════════════════════════════════╗${NC}"
+echo -e "${BOLD}║      FiberDoc — Atualização Automática   ║${NC}"
+echo -e "${BOLD}╚══════════════════════════════════════════╝${NC}"
 echo ""
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# ── 1. Verificar dependências ────────────────────────────────
+command -v curl  >/dev/null 2>&1 || err "curl não encontrado. Instale com: apt install curl"
+command -v unzip >/dev/null 2>&1 || { warn "unzip não encontrado. Instalando..."; apt-get install -y unzip -qq; }
 
-# Backup dos arquivos atuais
-info "Criando backup em $BACKUP_DIR ..."
-mkdir -p "$BACKUP_DIR/assets"
-cp "$FIBERDOC_DIR/dist/index.js" "$BACKUP_DIR/" 2>/dev/null || true
-cp "$FIBERDOC_DIR/dist/public/assets/"*.js "$BACKUP_DIR/assets/" 2>/dev/null || true
-cp "$FIBERDOC_DIR/dist/public/assets/"*.css "$BACKUP_DIR/assets/" 2>/dev/null || true
-cp "$FIBERDOC_DIR/dist/public/index.html" "$BACKUP_DIR/" 2>/dev/null || true
-success "Backup salvo."
+# ── 2. Detectar versão instalada ─────────────────────────────
+INSTALLED_VERSION="desconhecida"
+if [ -f "$APP_DIR/package.json" ]; then
+  INSTALLED_VERSION=$(grep '"version"' "$APP_DIR/package.json" 2>/dev/null \
+    | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/' || echo "desconhecida")
+fi
+info "Versão instalada: ${BOLD}$INSTALLED_VERSION${NC}"
 
-# Copiar novos arquivos
-info "Atualizando arquivos da aplicação..."
-cp -r "$SCRIPT_DIR/dist/"* "$FIBERDOC_DIR/dist/"
-chown -R fiberdoc:fiberdoc "$FIBERDOC_DIR/dist/" 2>/dev/null || true
-success "Arquivos atualizados."
+# ── 3. Buscar versão mais recente no GitHub ──────────────────
+info "Verificando versão mais recente no GitHub..."
+API_RESPONSE=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null)
+LATEST=$(echo "$API_RESPONSE" | grep '"tag_name"' | head -1 \
+  | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
 
-# Aplicar migrações SQL se existirem
-if [ -f "$SCRIPT_DIR/schema-full.sql" ]; then
-  info "Verificando migrações do banco de dados..."
-  # Carregar variáveis de ambiente
-  if [ -f "$FIBERDOC_DIR/.env" ]; then
-    export $(grep -v '^#' "$FIBERDOC_DIR/.env" | xargs) 2>/dev/null || true
+if [ -z "$LATEST" ]; then
+  err "Não foi possível obter a versão mais recente. Verifique a conexão com a internet."
+fi
+
+LATEST_VERSION="${LATEST#v}"
+info "Versão mais recente: ${BOLD}$LATEST${NC}"
+
+# ── 4. Verificar se já está atualizado ──────────────────────
+if [ "$INSTALLED_VERSION" = "$LATEST_VERSION" ]; then
+  echo ""
+  log "O sistema já está na versão mais recente (${BOLD}$INSTALLED_VERSION${NC})."
+  echo ""
+  exit 0
+fi
+
+echo ""
+warn "Nova versão disponível: ${BOLD}$INSTALLED_VERSION${NC} → ${BOLD}$LATEST_VERSION${NC}"
+echo ""
+
+# ── 5. Confirmar atualização ─────────────────────────────────
+# Se executado via pipe (curl | bash), pular confirmação interativa
+if [ -t 0 ]; then
+  read -p "Deseja atualizar agora? [S/n] " CONFIRM
+  CONFIRM="${CONFIRM:-S}"
+  if [[ ! "$CONFIRM" =~ ^[Ss]$ ]]; then
+    echo "Atualização cancelada."
+    exit 0
   fi
-  warn "Para aplicar migrações manualmente: mysql -u fiberdoc -p fiberdoc < $SCRIPT_DIR/schema-full.sql"
 fi
 
-# Reiniciar serviço
-info "Reiniciando serviço..."
-systemctl restart "$SERVICE_NAME"
-sleep 3
+# ── 6. Criar backup ──────────────────────────────────────────
+BACKUP_DIR="$APP_DIR/backup-$(date +%Y%m%d-%H%M%S)"
+info "Criando backup em $BACKUP_DIR ..."
+mkdir -p "$BACKUP_DIR"
+cp "$APP_DIR/dist/index.js" "$BACKUP_DIR/" 2>/dev/null || true
+cp -r "$APP_DIR/dist/public" "$BACKUP_DIR/" 2>/dev/null || true
+log "Backup criado"
 
-if systemctl is-active --quiet "$SERVICE_NAME"; then
-  success "Serviço reiniciado com sucesso."
+# ── 7. Baixar pacote de atualização ─────────────────────────
+ZIP_NAME="fiberdoc-update-${LATEST_VERSION}.zip"
+ZIP_URL="https://github.com/$REPO/releases/download/$LATEST/$ZIP_NAME"
+mkdir -p "$TMP_DIR"
+info "Baixando $ZIP_NAME ..."
+curl -fsSL "$ZIP_URL" -o "$TMP_DIR/update.zip" \
+  || err "Falha ao baixar o pacote. Verifique: $ZIP_URL"
+log "Pacote baixado"
+
+# ── 8. Extrair e aplicar ─────────────────────────────────────
+info "Extraindo pacote..."
+unzip -q "$TMP_DIR/update.zip" -d "$TMP_DIR/extracted"
+
+# Detectar subdiretório raiz no ZIP
+EXTRACT_DIR="$TMP_DIR/extracted"
+ENTRIES=$(ls "$EXTRACT_DIR" | wc -l)
+if [ "$ENTRIES" -eq 1 ]; then
+  SUBDIR=$(ls "$EXTRACT_DIR")
+  if [ -d "$EXTRACT_DIR/$SUBDIR" ]; then
+    EXTRACT_DIR="$EXTRACT_DIR/$SUBDIR"
+  fi
+fi
+
+info "Aplicando arquivos atualizados..."
+for item in "$EXTRACT_DIR"/*; do
+  name=$(basename "$item")
+  case "$name" in
+    .env|fiberdoc.env|node_modules|storage|backups) continue ;;
+  esac
+  cp -r "$item" "$APP_DIR/$name"
+done
+log "Arquivos aplicados"
+
+# ── 9. Atualizar versão no package.json ─────────────────────
+if [ -f "$EXTRACT_DIR/package.json" ]; then
+  cp "$EXTRACT_DIR/package.json" "$APP_DIR/package.json"
+fi
+
+# ── 10. Reiniciar serviço ────────────────────────────────────
+info "Reiniciando serviço FiberDoc..."
+if systemctl is-active --quiet fiberdoc 2>/dev/null; then
+  systemctl restart fiberdoc
+  log "Serviço reiniciado via systemctl"
+elif command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q fiberdoc; then
+  pm2 restart fiberdoc
+  log "Serviço reiniciado via pm2"
 else
-  warn "Verifique o serviço: journalctl -u $SERVICE_NAME -n 20"
+  warn "Reinicie o serviço manualmente: systemctl restart fiberdoc"
 fi
+
+# ── 11. Limpar temporários ───────────────────────────────────
+rm -rf "$TMP_DIR"
 
 echo ""
-success "Atualização concluída!"
+echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}${BOLD}║   Atualização concluída com sucesso!     ║${NC}"
+echo -e "${GREEN}${BOLD}║   FiberDoc $LATEST_VERSION instalado              ║${NC}"
+echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "  Backup salvo em: ${CYAN}$BACKUP_DIR${NC}"
+echo -e "  Faça um ${BOLD}hard refresh${NC} (Ctrl+Shift+R) no navegador."
 echo ""
