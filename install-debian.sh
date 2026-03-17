@@ -285,10 +285,10 @@ User=$FIBERDOC_USER
 WorkingDirectory=$FIBERDOC_DIR
 EnvironmentFile=$FIBERDOC_DIR/.env
 ExecStart=/usr/bin/node $FIBERDOC_DIR/dist/index.js
-Restart=always
-RestartSec=5
-StandardOutput=append:$FIBERDOC_DIR/logs/fiberdoc.log
-StandardError=append:$FIBERDOC_DIR/logs/fiberdoc-error.log
+Restart=on-failure
+RestartSec=10
+KillMode=mixed
+TimeoutStopSec=15
 
 [Install]
 WantedBy=multi-user.target
