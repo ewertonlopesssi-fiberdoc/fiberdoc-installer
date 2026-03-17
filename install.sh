@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # FiberDoc — Script de Instalação para Debian/Ubuntu
-# Versão: 6.2.4
+# Versão: 6.2.5
 # =============================================================================
 set -e
 
@@ -25,7 +25,7 @@ error()   { echo -e "${RED}[ERRO]${NC} $1"; exit 1; }
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║          FiberDoc v6.2.4 — Instalação Automática         ║"
+echo "║          FiberDoc v6.2.5 — Instalação Automática         ║"
 echo "║     Sistema de Documentação de Fibras e Equipamentos     ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
@@ -63,6 +63,17 @@ SETUP_NGINX="${SETUP_NGINX:-S}"
 if [[ "$SETUP_NGINX" =~ ^[Ss]$ ]]; then
   read -p "  Domínio ou IP para o Nginx [padrão: $(hostname -I | awk '{print $1}')]: " NGINX_HOST
   NGINX_HOST="${NGINX_HOST:-$(hostname -I | awk '{print $1}')}"
+fi
+
+echo ""
+echo "─── Módulo de Provedores ────────────────────────────────"
+read -p "  Ocultar o módulo de múltiplos provedores? [s/N]: " HIDE_PROV_INPUT
+HIDE_PROV_INPUT="${HIDE_PROV_INPUT:-N}"
+if [[ "$HIDE_PROV_INPUT" =~ ^[Ss]$ ]]; then
+  HIDE_PROVIDERS_VALUE="true"
+  info "Módulo de provedores será ocultado no menu."
+else
+  HIDE_PROVIDERS_VALUE="false"
 fi
 
 # Gerar JWT_SECRET
@@ -152,6 +163,8 @@ NODE_ENV=production
 PORT=$APP_PORT
 DATABASE_URL=$DATABASE_URL
 JWT_SECRET=$JWT_SECRET
+# Ocultar módulo de múltiplos provedores no menu (true/false)
+HIDE_PROVIDERS=$HIDE_PROVIDERS_VALUE
 # Deixar em branco para usar autenticação local (admin@fiberdoc.local / fiberdoc2025)
 OAUTH_SERVER_URL=
 VITE_APP_ID=

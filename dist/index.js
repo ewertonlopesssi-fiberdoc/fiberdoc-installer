@@ -42,6 +42,9 @@ __export(schema_exports, {
   ctoViaAssociations: () => ctoViaAssociations,
   ctoVias: () => ctoVias,
   ctos: () => ctos,
+  dgoPortFiberLinks: () => dgoPortFiberLinks,
+  dgoPortLinks: () => dgoPortLinks,
+  dgoSlotCableLinks: () => dgoSlotCableLinks,
   equipmentInterfaces: () => equipmentInterfaces,
   equipmentSlots: () => equipmentSlots,
   equipmentTypeEnum: () => equipmentTypeEnum,
@@ -52,6 +55,8 @@ __export(schema_exports, {
   ipAuditLog: () => ipAuditLog,
   ipBlocks: () => ipBlocks,
   maintenanceHistory: () => maintenanceHistory,
+  mapDgoElements: () => mapDgoElements,
+  mapDgoGroups: () => mapDgoGroups,
   mapElementGroups: () => mapElementGroups,
   mapElements: () => mapElements,
   mapGroups: () => mapGroups,
@@ -75,6 +80,7 @@ __export(schema_exports, {
   powerSources: () => powerSources,
   racks: () => racks,
   rooms: () => rooms,
+  routeExtraTubes: () => routeExtraTubes,
   sgpConfig: () => sgpConfig,
   sgpLinkHistory: () => sgpLinkHistory,
   snmpAlerts: () => snmpAlerts,
@@ -105,7 +111,7 @@ import {
   double,
   boolean
 } from "drizzle-orm/mysql-core";
-var users, rooms, equipmentTypeEnum, equipments, equipmentSlots, ports, fiberColorEnum, fibers, connections, maintenanceHistory, ceos, ceoTubes, ceoVias, backupSchedules, backupHistory, systemSettings, ipBlocks, ipAddresses, ipAuditLog, equipmentInterfaces, powerSources, snmpAlerts, tuyaDevices, tuyaAccounts, tuyaReadings, topologyLayouts, snmpReadings, racks, ctos, mapElements, mapRoutes, sgpConfig, ctoAlerts, ctoAlertConfig, ctoTubes, ctoVias, mapGroups, mapElementGroups, mapRouteGroups, mapPoleGroups, mapReserveGroups, appSettings, sgpLinkHistory, ceoBandejas, ceoSplitters, ceoSplitterVias, ceoViaAssociations, sshCredentials, sshCommands, sshExecutionLog, sshDevices, sshQuickCommands, sshExecutions, bgpPeers, sshDeviceCommands, networkSnmpConfig, networkSnmpPorts, networkSnmpReadings, networkPortReadings, networkSnmpAlerts, mapOltElements, oltPortFiberLinks, ctoViaAssociations, mapPoles, mapTechnicalReserves, mapPois, mapPoiGroups, mapOltGroups;
+var users, rooms, equipmentTypeEnum, equipments, equipmentSlots, ports, fiberColorEnum, fibers, connections, maintenanceHistory, ceos, ceoTubes, ceoVias, backupSchedules, backupHistory, systemSettings, ipBlocks, ipAddresses, ipAuditLog, equipmentInterfaces, powerSources, snmpAlerts, tuyaDevices, tuyaAccounts, tuyaReadings, topologyLayouts, snmpReadings, racks, ctos, mapElements, mapRoutes, routeExtraTubes, sgpConfig, ctoAlerts, ctoAlertConfig, ctoTubes, ctoVias, mapGroups, mapElementGroups, mapRouteGroups, mapPoleGroups, mapReserveGroups, appSettings, sgpLinkHistory, ceoBandejas, ceoSplitters, ceoSplitterVias, ceoViaAssociations, sshCredentials, sshCommands, sshExecutionLog, sshDevices, sshQuickCommands, sshExecutions, bgpPeers, sshDeviceCommands, networkSnmpConfig, networkSnmpPorts, networkSnmpReadings, networkPortReadings, networkSnmpAlerts, mapOltElements, oltPortFiberLinks, dgoPortFiberLinks, ctoViaAssociations, mapPoles, mapTechnicalReserves, mapPois, mapPoiGroups, mapOltGroups, mapDgoElements, dgoSlotCableLinks, dgoPortLinks, mapDgoGroups;
 var init_schema = __esm({
   "drizzle/schema.ts"() {
     "use strict";
@@ -196,6 +202,9 @@ var init_schema = __esm({
       // Password SSH encriptada (AES-256)
       sshPort: int("sshPort").default(22),
       // Porta SSH (default: 22)
+      // Campo óptico — potência TX usada no balanço óptico estimado via DGO
+      txPowerDbm: float("txPowerDbm"),
+      // Potência TX óptica em dBm (ex: 5.0 para OLT GPON)
       createdAt: timestamp("createdAt").defaultNow().notNull(),
       updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
     });
@@ -229,6 +238,8 @@ var init_schema = __esm({
       // Equipamento da porta vinculada
       connectedToPortId: int("connectedToPortId"),
       // Porta vinculada (patch/conexão direta)
+      txPowerDbm: float("txPowerDbm"),
+      // Override da potência TX desta porta (null = usa txPowerDbm do equipamento)
       createdAt: timestamp("createdAt").defaultNow().notNull(),
       updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
     });
@@ -740,6 +751,19 @@ var init_schema = __esm({
       createdAt: timestamp("createdAt").defaultNow().notNull(),
       updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
     });
+    routeExtraTubes = mysqlTable("route_extra_tubes", {
+      id: int("id").autoincrement().primaryKey(),
+      routeId: int("routeId").notNull(),
+      // FK map_routes.id
+      elementId: int("elementId").notNull(),
+      // FK map_elements.id (CEO ou CTO)
+      tubeId: int("tubeId").notNull(),
+      // FK ceo_tubes.id ou cto_tubes.id
+      side: mysqlEnum("route_extra_tube_side", ["from", "to"]).notNull(),
+      // Origem ou destino
+      notes: text("notes"),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
     sgpConfig = mysqlTable("sgp_config", {
       id: int("id").autoincrement().primaryKey(),
       baseUrl: varchar("baseUrl", { length: 256 }).notNull(),
@@ -1182,6 +1206,21 @@ var init_schema = __esm({
       createdAt: timestamp("olt_link_created_at").defaultNow().notNull(),
       updatedAt: timestamp("olt_link_updated_at").defaultNow().onUpdateNow().notNull()
     });
+    dgoPortFiberLinks = mysqlTable("dgo_port_fiber_links", {
+      id: int("id").autoincrement().primaryKey(),
+      dgoElementId: int("dgoElementId").notNull().references(() => mapDgoElements.id, { onDelete: "cascade" }),
+      portId: int("portId").notNull().references(() => ports.id, { onDelete: "cascade" }),
+      txPowerDbm: float("txPowerDbm"),
+      // Override da potência TX desta porta (null = usa txPowerDbm do equipamento)
+      ceoElementId: int("ceoElementId").notNull().references(() => mapElements.id, { onDelete: "cascade" }),
+      tubeId: int("tubeId").notNull(),
+      // FK ceo_tubes.id
+      viaNumber: int("viaNumber").notNull(),
+      // Número da via dentro do tubo
+      notes: text("notes"),
+      createdAt: timestamp("dgo_link_created_at").defaultNow().notNull(),
+      updatedAt: timestamp("dgo_link_updated_at").defaultNow().onUpdateNow().notNull()
+    });
     ctoViaAssociations = mysqlTable("cto_via_associations", {
       id: int("id").autoincrement().primaryKey(),
       ctoId: int("ctoId").notNull(),
@@ -1242,6 +1281,52 @@ var init_schema = __esm({
       oltId: int("oltId").notNull().references(() => mapOltElements.id, { onDelete: "cascade" }),
       groupId: int("groupId").notNull().references(() => mapGroups.id, { onDelete: "cascade" })
     });
+    mapDgoElements = mysqlTable("map_dgo_elements", {
+      id: int("id").autoincrement().primaryKey(),
+      equipmentId: int("equipmentId").notNull().references(() => equipments.id, { onDelete: "cascade" }),
+      lat: double("lat").notNull(),
+      lng: double("lng").notNull(),
+      notes: text("notes"),
+      createdAt: timestamp("dgo_map_created_at").defaultNow().notNull(),
+      updatedAt: timestamp("dgo_map_updated_at").defaultNow().onUpdateNow().notNull()
+    });
+    dgoSlotCableLinks = mysqlTable("dgo_slot_cable_links", {
+      id: int("id").autoincrement().primaryKey(),
+      dgoElementId: int("dgoElementId").notNull().references(() => mapDgoElements.id, { onDelete: "cascade" }),
+      slotId: int("slotId").notNull(),
+      // FK equipment_slots.id (bandeja do DGO)
+      routeId: int("routeId").notNull(),
+      // FK map_routes.id (cabo vinculado)
+      side: mysqlEnum("dgo_link_side", ["in", "out"]).notNull(),
+      // "in" = cabo entra, "out" = cabo sai
+      tubeId: int("tubeId"),
+      // FK ceo_tubes.id (tubo do cabo nesta bandeja, opcional)
+      tubeElementId: int("tubeElementId"),
+      // FK map_elements.id do CEO/CTO de onde vem o tubo (opcional)
+      notes: text("notes"),
+      createdAt: timestamp("dgo_link_created_at").defaultNow().notNull()
+    });
+    dgoPortLinks = mysqlTable("dgo_port_links", {
+      id: int("id").autoincrement().primaryKey(),
+      dgoElementId: int("dgoElementId").notNull(),
+      // FK map_dgo_elements.id
+      slotId: int("slotId").notNull(),
+      // FK equipment_slots.id (bandeja)
+      portNumber: int("portNumber").notNull(),
+      // 1..N (porta dentro da bandeja)
+      ceoElementId: int("ceoElementId"),
+      // FK map_elements.id (CEO de passagem, opcional)
+      portId: int("portId"),
+      // FK ports.id (porta do equipamento: OLT, switch, etc.)
+      notes: text("notes"),
+      createdAt: timestamp("dgo_port_link_created_at").defaultNow().notNull(),
+      updatedAt: timestamp("dgo_port_link_updated_at").defaultNow().onUpdateNow().notNull()
+    });
+    mapDgoGroups = mysqlTable("map_dgo_groups", {
+      id: int("id").autoincrement().primaryKey(),
+      dgoId: int("dgoId").notNull().references(() => mapDgoElements.id, { onDelete: "cascade" }),
+      groupId: int("groupId").notNull().references(() => mapGroups.id, { onDelete: "cascade" })
+    });
   }
 });
 
@@ -1263,22 +1348,41 @@ var init_env = __esm({
   }
 });
 
+// server/_core/tenantContext.ts
+import { AsyncLocalStorage } from "async_hooks";
+function runWithTenantDb(tenantDb, fn) {
+  return tenantDbStorage.run(tenantDb, fn);
+}
+function getTenantDbFromContext() {
+  return tenantDbStorage.getStore() ?? null;
+}
+var tenantDbStorage;
+var init_tenantContext = __esm({
+  "server/_core/tenantContext.ts"() {
+    "use strict";
+    tenantDbStorage = new AsyncLocalStorage();
+  }
+});
+
 // server/db.ts
 var db_exports = {};
 __export(db_exports, {
   acknowledgeCtoAlert: () => acknowledgeCtoAlert,
   acknowledgeSnmpAlert: () => acknowledgeSnmpAlert,
+  addDgoToGroup: () => addDgoToGroup,
   addElementToGroup: () => addElementToGroup,
   addOltToGroup: () => addOltToGroup,
   addPoiToGroup: () => addPoiToGroup,
   addPoleToGroup: () => addPoleToGroup,
   addReserveToGroup: () => addReserveToGroup,
+  addRouteExtraTube: () => addRouteExtraTube,
   addRouteToGroup: () => addRouteToGroup,
   addSgpLinkHistory: () => addSgpLinkHistory,
   bulkCreatePorts: () => bulkCreatePorts,
   bulkImportEquipments: () => bulkImportEquipments,
   bulkImportFibers: () => bulkImportFibers,
   calculateOpticalBalance: () => calculateOpticalBalance,
+  calculateOpticalBalanceFromDgo: () => calculateOpticalBalanceFromDgo,
   checkAndCreateCtoAlerts: () => checkAndCreateCtoAlerts,
   clearCtoViaFusion: () => clearCtoViaFusion,
   clearViaFusion: () => clearViaFusion,
@@ -1293,9 +1397,12 @@ __export(db_exports, {
   createCto: () => createCto,
   createCtoTube: () => createCtoTube,
   createCtoViaAssociation: () => createCtoViaAssociation,
+  createDgoPortFiberLink: () => createDgoPortFiberLink,
+  createDgoSlotCableLink: () => createDgoSlotCableLink,
   createEquipment: () => createEquipment,
   createFiber: () => createFiber,
   createMaintenanceRecord: () => createMaintenanceRecord,
+  createMapDgoElement: () => createMapDgoElement,
   createMapGroup: () => createMapGroup,
   createMapOltElement: () => createMapOltElement,
   createMapPoi: () => createMapPoi,
@@ -1323,8 +1430,12 @@ __export(db_exports, {
   deleteCtoTube: () => deleteCtoTube,
   deleteCtoViaAssociation: () => deleteCtoViaAssociation,
   deleteCtoViaAssociationByVias: () => deleteCtoViaAssociationByVias,
+  deleteDgoPortFiberLink: () => deleteDgoPortFiberLink,
+  deleteDgoPortLink: () => deleteDgoPortLink,
+  deleteDgoSlotCableLink: () => deleteDgoSlotCableLink,
   deleteEquipment: () => deleteEquipment,
   deleteFiber: () => deleteFiber,
+  deleteMapDgoElement: () => deleteMapDgoElement,
   deleteMapElement: () => deleteMapElement,
   deleteMapGroup: () => deleteMapGroup,
   deleteMapOltElement: () => deleteMapOltElement,
@@ -1338,6 +1449,8 @@ __export(db_exports, {
   deletePowerSource: () => deletePowerSource,
   deleteRack: () => deleteRack,
   deleteRoom: () => deleteRoom,
+  deleteRouteExtraTube: () => deleteRouteExtraTube,
+  deleteRouteExtraTubesByRoute: () => deleteRouteExtraTubesByRoute,
   deleteSlot: () => deleteSlot,
   deleteTuyaAccount: () => deleteTuyaAccount,
   deleteTuyaDevice: () => deleteTuyaDevice,
@@ -1345,6 +1458,7 @@ __export(db_exports, {
   deleteViaAssociation: () => deleteViaAssociation,
   deleteViaAssociationByVias: () => deleteViaAssociationByVias,
   exportFullBackup: () => exportFullBackup,
+  getAllDgoGroupMemberships: () => getAllDgoGroupMemberships,
   getAllElementGroupMemberships: () => getAllElementGroupMemberships,
   getAllOltGroupMemberships: () => getAllOltGroupMemberships,
   getAllPoiGroupMemberships: () => getAllPoiGroupMemberships,
@@ -1366,6 +1480,10 @@ __export(db_exports, {
   getCtos: () => getCtos,
   getDashboardStats: () => getDashboardStats,
   getDb: () => getDb,
+  getDgoPortFiberLinks: () => getDgoPortFiberLinks,
+  getDgoPortLinks: () => getDgoPortLinks,
+  getDgoSlotCableLinks: () => getDgoSlotCableLinks,
+  getDgoSlotCtoBalances: () => getDgoSlotCtoBalances,
   getElementGroups: () => getElementGroups,
   getEquipmentById: () => getEquipmentById,
   getEquipments: () => getEquipments,
@@ -1374,6 +1492,8 @@ __export(db_exports, {
   getGroupMembers: () => getGroupMembers,
   getLatestTuyaReadings: () => getLatestTuyaReadings,
   getMaintenanceHistory: () => getMaintenanceHistory,
+  getMapDgoElementById: () => getMapDgoElementById,
+  getMapDgoElements: () => getMapDgoElements,
   getMapElements: () => getMapElements,
   getMapGroups: () => getMapGroups,
   getMapOltElementById: () => getMapOltElementById,
@@ -1390,6 +1510,7 @@ __export(db_exports, {
   getOltPortLinks: () => getOltPortLinks,
   getPortById: () => getPortById,
   getPortsByEquipment: () => getPortsByEquipment,
+  getPortsByEquipmentForDgo: () => getPortsByEquipmentForDgo,
   getPortsBySlot: () => getPortsBySlot,
   getPowerSourceById: () => getPowerSourceById,
   getPowerSources: () => getPowerSources,
@@ -1398,6 +1519,7 @@ __export(db_exports, {
   getRoomById: () => getRoomById,
   getRoomReport: () => getRoomReport,
   getRooms: () => getRooms,
+  getRouteExtraTubes: () => getRouteExtraTubes,
   getRouteGroups: () => getRouteGroups,
   getRoutesOccupancy: () => getRoutesOccupancy,
   getSgpConfig: () => getSgpConfig,
@@ -1433,6 +1555,7 @@ __export(db_exports, {
   getViasByTube: () => getViasByTube,
   hasActiveAlertOfType: () => hasActiveAlertOfType,
   listUsersForAdmin: () => listUsersForAdmin,
+  removeDgoFromGroup: () => removeDgoFromGroup,
   removeElementFromGroup: () => removeElementFromGroup,
   removeOltFromAllGroups: () => removeOltFromAllGroups,
   removeOltFromGroup: () => removeOltFromGroup,
@@ -1470,9 +1593,11 @@ __export(db_exports, {
   updateCto: () => updateCto,
   updateCtoTube: () => updateCtoTube,
   updateCtoVia: () => updateCtoVia,
+  updateDgoPortFiberLink: () => updateDgoPortFiberLink,
   updateEquipment: () => updateEquipment,
   updateEquipmentImage: () => updateEquipmentImage,
   updateFiber: () => updateFiber,
+  updateMapDgoElement: () => updateMapDgoElement,
   updateMapGroup: () => updateMapGroup,
   updateMapOltElement: () => updateMapOltElement,
   updateMapPoi: () => updateMapPoi,
@@ -1493,6 +1618,7 @@ __export(db_exports, {
   updateUserRole: () => updateUserRole,
   updateVia: () => updateVia,
   upsertBackupSchedule: () => upsertBackupSchedule,
+  upsertDgoPortLink: () => upsertDgoPortLink,
   upsertMapElement: () => upsertMapElement,
   upsertUser: () => upsertUser
 });
@@ -1522,6 +1648,8 @@ function createPool() {
   return pool;
 }
 async function getDb() {
+  const tenantDb = getTenantDbFromContext();
+  if (tenantDb) return tenantDb;
   if (!_db && process.env.DATABASE_URL) {
     try {
       if (!_pool) {
@@ -1728,22 +1856,33 @@ async function getPortsByEquipment(equipmentId) {
     createdAt: ports.createdAt,
     connectedEquipmentName: equipments.name,
     connectedPortNumber: sql`connected_port.portNumber`,
-    connectedPortLabel: sql`connected_port.label`
+    connectedPortLabel: sql`connected_port.label`,
+    connectedPortSlotId: sql`connected_port.slotId`
   }).from(ports).leftJoin(equipments, eq(ports.connectedToEquipmentId, equipments.id)).leftJoin(
     sql`${ports} AS connected_port`,
     sql`connected_port.id = ${ports.connectedToPortId}`
   ).where(eq(ports.equipmentId, equipmentId));
   const slotIds = Array.from(new Set(portRows.map((p) => p.slotId).filter(Boolean)));
+  const connectedSlotIds = Array.from(new Set(
+    portRows.map((p) => p.connectedPortSlotId).filter(Boolean)
+  ));
+  const allSlotIds = Array.from(/* @__PURE__ */ new Set([...slotIds, ...connectedSlotIds]));
   let slotMap = /* @__PURE__ */ new Map();
-  if (slotIds.length > 0) {
-    const slotRows = await db.select({ id: equipmentSlots.id, slotNumber: equipmentSlots.slotNumber, label: equipmentSlots.label }).from(equipmentSlots).where(sql`${equipmentSlots.id} IN (${sql.join(slotIds.map((id) => sql`${id}`), sql`, `)})`);
+  if (allSlotIds.length > 0) {
+    const slotRows = await db.select({ id: equipmentSlots.id, slotNumber: equipmentSlots.slotNumber, label: equipmentSlots.label }).from(equipmentSlots).where(sql`${equipmentSlots.id} IN (${sql.join(allSlotIds.map((id) => sql`${id}`), sql`, `)})`);
     slotMap = new Map(slotRows.map((s) => [s.id, { slotNumber: s.slotNumber, slotLabel: s.label ?? null }]));
   }
-  const rows = portRows.map((p) => ({
-    ...p,
-    slotNumber: p.slotId ? slotMap.get(p.slotId)?.slotNumber ?? null : null,
-    slotLabel: p.slotId ? slotMap.get(p.slotId)?.slotLabel ?? null : null
-  }));
+  const rows = portRows.map((p) => {
+    const connSlotId = p.connectedPortSlotId;
+    const connSlot = connSlotId ? slotMap.get(connSlotId) : null;
+    return {
+      ...p,
+      slotNumber: p.slotId ? slotMap.get(p.slotId)?.slotNumber ?? null : null,
+      slotLabel: p.slotId ? slotMap.get(p.slotId)?.slotLabel ?? null : null,
+      connectedPortSlotNumber: connSlot?.slotNumber ?? null,
+      connectedPortSlotLabel: connSlot?.slotLabel ?? null
+    };
+  });
   rows.sort((a, b) => {
     const sA = a.slotNumber ?? "";
     const sB = b.slotNumber ?? "";
@@ -3158,13 +3297,13 @@ async function createMapRoute(data) {
   const fiberCount = data.fiberCount ?? 12;
   const cableType = data.cableType ?? "FO";
   const color = data.color ?? "#22d3ee";
-  const path6 = data.path ?? "[]";
+  const path7 = data.path ?? "[]";
   const notes = data.notes && data.notes.trim() !== "" ? data.notes.trim() : null;
   if (!_pool) _pool = createPool();
   const [result] = await _pool.promise().execute(
     `INSERT INTO map_routes (name, fromElementId, toElementId, fiberCount, cableType, color, path, notes)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [name, fromId, toId, fiberCount, cableType, color, path6, notes]
+    [name, fromId, toId, fiberCount, cableType, color, path7, notes]
   );
   return result.insertId;
 }
@@ -3740,7 +3879,19 @@ async function createViaAssociation(data) {
 async function deleteViaAssociation(id) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
+  const [assoc] = await db.select().from(ceoViaAssociations).where(eq(ceoViaAssociations.id, id)).limit(1);
   await db.delete(ceoViaAssociations).where(eq(ceoViaAssociations.id, id));
+  if (assoc) {
+    let tubeViaId = null;
+    if (assoc.sourceType === "tube" && assoc.targetType === "splitter") {
+      tubeViaId = assoc.sourceViaId;
+    } else if (assoc.sourceType === "splitter" && assoc.targetType === "tube") {
+      tubeViaId = assoc.targetViaId;
+    }
+    if (tubeViaId !== null) {
+      await db.update(ceoVias).set({ fusedToSplitterId: null, fusedToSplitterViaId: null }).where(eq(ceoVias.id, tubeViaId));
+    }
+  }
 }
 async function deleteViaAssociationByVias(ceoId, viaId1, viaId2) {
   const db = await getDb();
@@ -4262,6 +4413,67 @@ async function deleteOltPortLink(id) {
   if (!db) throw new Error("DB not available");
   await db.delete(oltPortFiberLinks).where(eq(oltPortFiberLinks.id, id));
 }
+async function getDgoPortFiberLinks(dgoElementId) {
+  const db = await getDb();
+  if (!db) return [];
+  const links = await db.select().from(dgoPortFiberLinks).where(eq(dgoPortFiberLinks.dgoElementId, dgoElementId));
+  if (links.length === 0) return [];
+  const portIds = Array.from(new Set(links.map((l) => l.portId)));
+  const allPorts = await db.select({
+    id: ports.id,
+    label: ports.label,
+    portNumber: ports.portNumber,
+    slotId: ports.slotId
+  }).from(ports).where(sql`${ports.id} IN (${sql.join(portIds.map((id) => sql`${id}`), sql`, `)})`);
+  const allElements = await db.select({ id: mapElements.id, type: mapElements.type, referenceId: mapElements.referenceId }).from(mapElements);
+  const allCeos = await db.select({ id: ceos.id, name: ceos.name }).from(ceos);
+  const allCeoTubes = await db.select({ id: ceoTubes.id, identifier: ceoTubes.identifier }).from(ceoTubes);
+  const slotIds = Array.from(new Set(allPorts.map((p) => p.slotId).filter(Boolean)));
+  let slotMap = /* @__PURE__ */ new Map();
+  if (slotIds.length > 0) {
+    const allSlots = await db.select({ id: equipmentSlots.id, slotNumber: equipmentSlots.slotNumber, label: equipmentSlots.label }).from(equipmentSlots).where(sql`${equipmentSlots.id} IN (${sql.join(slotIds.map((id) => sql`${id}`), sql`, `)})`);
+    slotMap = new Map(allSlots.map((s) => [s.id, { slotNumber: s.slotNumber, label: s.label }]));
+  }
+  const portMap = new Map(allPorts.map((p) => [p.id, p]));
+  const elementMap = new Map(allElements.map((e) => [e.id, e]));
+  const ceoMap = new Map(allCeos.map((c) => [c.id, c]));
+  const tubeMap = new Map(allCeoTubes.map((t2) => [t2.id, t2]));
+  return links.map((link) => {
+    const port = portMap.get(link.portId);
+    const el = elementMap.get(link.ceoElementId);
+    const ceo = el ? ceoMap.get(el.referenceId) : null;
+    const tube = tubeMap.get(link.tubeId);
+    const slot = port?.slotId ? slotMap.get(port.slotId) : null;
+    const portBase = port ? `Porta ${port.portNumber}${port.label ? ` \u2014 ${port.label}` : ""}` : `Porta #${link.portId}`;
+    const slotDisplay = slot?.slotNumber ?? null;
+    return {
+      ...link,
+      portLabel: port?.label ?? null,
+      portNumber: port?.portNumber ?? String(link.portId),
+      portName: slotDisplay ? `${slotDisplay} / ${portBase}` : portBase,
+      slotNumber: slot?.slotNumber ?? null,
+      slotLabel: slot?.label ?? null,
+      ceoName: ceo?.name ?? `CEO #${link.ceoElementId}`,
+      tubeIdentifier: tube?.identifier ?? `Tubo #${link.tubeId}`
+    };
+  });
+}
+async function createDgoPortFiberLink(data) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(dgoPortFiberLinks).values(data);
+  return result[0].insertId;
+}
+async function updateDgoPortFiberLink(id, data) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(dgoPortFiberLinks).set(data).where(eq(dgoPortFiberLinks.id, id));
+}
+async function deleteDgoPortFiberLink(id) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(dgoPortFiberLinks).where(eq(dgoPortFiberLinks.id, id));
+}
 function detectUnbalancedRatio(identifier) {
   const m = identifier.match(/(\d+)\/(\d+)/);
   if (!m) return null;
@@ -4306,7 +4518,7 @@ function getSignalQuality(rxDbm) {
   if (rxDbm >= -30) return "weak";
   return "no_signal";
 }
-async function calculateOpticalBalance(ctoElementId) {
+async function calculateOpticalBalance(ctoElementId, options) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   const warnings = [];
@@ -4324,7 +4536,11 @@ async function calculateOpticalBalance(ctoElementId) {
   const allCtoViaAssocs = await db.select().from(ctoViaAssociations);
   const allOltElements = await db.select().from(mapOltElements);
   const allOltLinks = await db.select().from(oltPortFiberLinks);
-  const allPorts = await db.select({ id: ports.id, label: ports.label, portNumber: ports.portNumber }).from(ports);
+  const allDgoElements = await db.select().from(mapDgoElements).catch(() => []);
+  const allDgoLinks = await db.select().from(dgoPortFiberLinks).catch(() => []);
+  const allDgoSlotLinks = await db.select().from(dgoSlotCableLinks).catch(() => []);
+  const allEquipments = await db.select({ id: equipments.id, name: equipments.name, txPowerDbm: equipments.txPowerDbm }).from(equipments).catch(() => []);
+  const allPorts = await db.select({ id: ports.id, label: ports.label, portNumber: ports.portNumber, slotId: ports.slotId, equipmentId: ports.equipmentId, connectedToEquipmentId: ports.connectedToEquipmentId, txPowerDbm: ports.txPowerDbm }).from(ports).catch(() => []);
   const allTechReservesOB = await db.select().from(mapTechnicalReserves);
   const reserveByRouteOB = /* @__PURE__ */ new Map();
   for (const r of allTechReservesOB) {
@@ -4404,6 +4620,7 @@ async function calculateOpticalBalance(ctoElementId) {
   let totalSplitterLoss = 0;
   let totalFusionCount = 0;
   let foundOlt = null;
+  let foundDgo = null;
   const reversePath = [];
   reversePath.push({ type: "cto", label: ctoName, lossDb: 0 });
   let currentElementId = ctoElementId;
@@ -4491,6 +4708,25 @@ async function calculateOpticalBalance(ctoElementId) {
       break;
     }
     visited.add(loopKey);
+    if (currentTubeId !== null) {
+      const dgoLinkAtStart = allDgoLinks.find(
+        (l) => l.ceoElementId === currentElementId && l.tubeId === currentTubeId && (currentViaNumber === null || l.viaNumber === currentViaNumber)
+      ) ?? allDgoLinks.find(
+        (l) => l.ceoElementId === currentElementId && l.tubeId === currentTubeId
+      );
+      if (dgoLinkAtStart) {
+        const dgoEl = allDgoElements.find((d) => d.id === dgoLinkAtStart.dgoElementId);
+        if (dgoEl) {
+          foundDgo = { element: dgoEl, link: dgoLinkAtStart };
+          const portInfo = portById.get(dgoLinkAtStart.portId);
+          const portLabel = portInfo?.label ?? portInfo?.portNumber ?? `Porta #${dgoLinkAtStart.portId}`;
+          const ceoEl = elementById.get(currentElementId);
+          if (ceoEl) reversePath.push({ type: "ceo", label: getElementName(ceoEl), lossDb: 0 });
+          reversePath.push({ type: "olt", label: `DGO \u2014 ${portLabel}`, lossDb: 0 });
+          break;
+        }
+      }
+    }
     let activeRoute = null;
     let isForwardOnRoute = false;
     if (currentTubeId) {
@@ -4533,6 +4769,89 @@ async function calculateOpticalBalance(ctoElementId) {
     reversePath.push({ type: "cable", label: cableLabel, lossDb: 0, distKm: segDistKm });
     const prevElementId = isForwardOnRoute ? activeRoute.fromElementId ?? null : activeRoute.toElementId ?? null;
     if (!prevElementId) {
+      const dgoSlotLinksForRoute = allDgoSlotLinks.filter((sl) => sl.routeId === activeRoute.id);
+      if (dgoSlotLinksForRoute.length > 0) {
+        let matchedSlotLink = null;
+        if (currentTubeId !== null) {
+          matchedSlotLink = dgoSlotLinksForRoute.find((sl) => sl.tubeId === currentTubeId);
+        }
+        if (!matchedSlotLink && dgoSlotLinksForRoute.length === 1) {
+          matchedSlotLink = dgoSlotLinksForRoute[0];
+        }
+        if (!matchedSlotLink && currentTubeId !== null) {
+          const ceoTubesForRoute = allCeoTubes.filter((t2) => {
+            const ceoEl = isForwardOnRoute ? activeRoute.toElementId ? elementById.get(activeRoute.toElementId) : null : activeRoute.fromElementId ? elementById.get(activeRoute.fromElementId) : null;
+            return ceoEl && t2.ceoId === ceoEl.referenceId;
+          }).sort((a, b) => a.id - b.id);
+          const tubeIndex = ceoTubesForRoute.findIndex((t2) => t2.id === currentTubeId);
+          const sortedSlotLinks = [...dgoSlotLinksForRoute].sort((a, b) => a.slotId - b.slotId);
+          if (tubeIndex >= 0 && tubeIndex < sortedSlotLinks.length) {
+            matchedSlotLink = sortedSlotLinks[tubeIndex];
+          } else {
+            matchedSlotLink = sortedSlotLinks[0];
+          }
+        }
+        if (matchedSlotLink) {
+          const dgoEl = allDgoElements.find((d) => d.id === matchedSlotLink.dgoElementId);
+          if (dgoEl) {
+            const dgoEquipment = allEquipments.find((e) => e.id === dgoEl.equipmentId);
+            const dgoEquipName = dgoEquipment?.name ?? `DGO #${dgoEl.id}`;
+            const portNumber = currentViaNumber ?? 1;
+            const dgoPort = allPorts.find(
+              (p) => p.equipmentId === dgoEl.equipmentId && p.slotId === matchedSlotLink.slotId && String(p.portNumber) === String(portNumber)
+            );
+            const manualDgoLink = dgoPort ? allDgoLinks.find((l) => l.dgoElementId === dgoEl.id && l.portId === dgoPort.id) : null;
+            if (manualDgoLink) {
+              foundDgo = { element: dgoEl, link: manualDgoLink };
+              const portLabel2 = dgoPort?.label ?? `Porta ${portNumber}`;
+              reversePath.push({ type: "olt", label: `${dgoEquipName} \u2014 ${portLabel2}`, lossDb: 0 });
+              break;
+            }
+            if (dgoPort) {
+              const connectedEquip = dgoPort.connectedToEquipmentId ? allEquipments.find((e) => e.id === dgoPort.connectedToEquipmentId) : null;
+              const effectiveTxPower2 = dgoPort.txPowerDbm ?? connectedEquip?.txPowerDbm ?? dgoEquipment?.txPowerDbm ?? null;
+              const portLabel2 = dgoPort.label ?? `Porta ${portNumber}`;
+              foundDgo = {
+                element: dgoEl,
+                link: {
+                  id: -1,
+                  dgoElementId: dgoEl.id,
+                  portId: dgoPort.id,
+                  txPowerDbm: effectiveTxPower2,
+                  ceoElementId: -1,
+                  tubeId: currentTubeId ?? -1,
+                  viaNumber: portNumber,
+                  notes: null,
+                  createdAt: /* @__PURE__ */ new Date(),
+                  updatedAt: /* @__PURE__ */ new Date()
+                }
+              };
+              reversePath.push({ type: "olt", label: `${dgoEquipName} \u2014 ${portLabel2}`, lossDb: 0 });
+              break;
+            }
+            const effectiveTxPower = dgoEquipment?.txPowerDbm ?? null;
+            const portLabel = `Porta ${portNumber} (auto)`;
+            foundDgo = {
+              element: dgoEl,
+              link: {
+                id: -1,
+                dgoElementId: dgoEl.id,
+                portId: -1,
+                txPowerDbm: effectiveTxPower,
+                ceoElementId: -1,
+                tubeId: currentTubeId ?? -1,
+                viaNumber: portNumber,
+                notes: null,
+                createdAt: /* @__PURE__ */ new Date(),
+                updatedAt: /* @__PURE__ */ new Date()
+              }
+            };
+            reversePath.push({ type: "olt", label: `${dgoEquipName} \u2014 ${portLabel}`, lossDb: 0 });
+            warnings.push(`Porta ${portNumber} da bandeja do DGO "${dgoEquipName}" n\xE3o encontrada no cadastro \u2014 usando pot\xEAncia do equipamento`);
+            break;
+          }
+        }
+      }
       warnings.push(`Cabo "${activeRoute.name ?? `#${activeRoute.id}`}" n\xE3o tem elemento de origem vinculado`);
       break;
     }
@@ -4720,13 +5039,39 @@ async function calculateOpticalBalance(ctoElementId) {
     }
     currentElementId = prevElementId;
   }
-  if (!foundOlt) {
-    warnings.push("N\xE3o foi poss\xEDvel rastrear a fibra at\xE9 uma porta OLT \u2014 verifique se a OLT est\xE1 posicionada no mapa e se as portas est\xE3o vinculadas aos tubos dos CEOs");
+  if (!foundOlt && !foundDgo && options?.overrideTxPowerDbm == null) {
+    warnings.push("N\xE3o foi poss\xEDvel rastrear a fibra at\xE9 uma porta OLT ou DGO \u2014 verifique se o equipamento est\xE1 posicionado no mapa e se as portas est\xE3o vinculadas aos tubos dos CEOs");
     return { found: false, rxPowerDbm: null, txPowerDbm: 0, totalLossDb: 0, distanceKm: totalDistanceKm, cableLossDb: 0, splitterLossDb: totalSplitterLoss, fusionLossDb: 0, signalQuality: "no_signal", path: [], warnings };
   }
-  const txPower = foundOlt.link.txPowerDbm ?? foundOlt.element.defaultTxPowerDbm ?? 5;
-  const attenuationPerKm = foundOlt.element.fiberAttenuationDbPerKm ?? 0.35;
-  const fusionLossPerFusion = foundOlt.element.fusionLossDb ?? 0.1;
+  let txPower;
+  let attenuationPerKm;
+  let fusionLossPerFusion;
+  if (options?.overrideTxPowerDbm != null) {
+    txPower = options.overrideTxPowerDbm;
+    attenuationPerKm = 0.35;
+    fusionLossPerFusion = 0.1;
+    if (options.overrideEquipmentName) {
+      reversePath.push({ type: "olt", label: options.overrideEquipmentName, lossDb: 0 });
+    }
+  } else if (foundDgo) {
+    let resolvedTxPower = foundDgo.link.txPowerDbm ?? null;
+    if (resolvedTxPower === null && foundDgo.link.id > 0) {
+      const dgoPort = allPorts.find((p) => p.id === foundDgo.link.portId);
+      const dgoEquipment = dgoPort?.connectedToEquipmentId ? allEquipments.find((e) => e.id === dgoPort.connectedToEquipmentId) : null;
+      resolvedTxPower = dgoPort?.txPowerDbm ?? dgoEquipment?.txPowerDbm ?? null;
+    }
+    if (resolvedTxPower === null) {
+      const dgoEquip = allEquipments.find((e) => e.id === foundDgo.element.equipmentId);
+      resolvedTxPower = dgoEquip?.txPowerDbm ?? 5;
+    }
+    txPower = resolvedTxPower;
+    attenuationPerKm = 0.35;
+    fusionLossPerFusion = 0.1;
+  } else {
+    txPower = foundOlt?.link.txPowerDbm ?? foundOlt?.element.defaultTxPowerDbm ?? 5;
+    attenuationPerKm = foundOlt?.element.fiberAttenuationDbPerKm ?? 0.35;
+    fusionLossPerFusion = foundOlt?.element.fusionLossDb ?? 0.1;
+  }
   const cableLoss = totalDistanceKm * attenuationPerKm;
   const fusionLoss = totalFusionCount * fusionLossPerFusion;
   const totalLoss = cableLoss + totalSplitterLoss + fusionLoss;
@@ -4950,12 +5295,513 @@ async function getAllOltGroupMemberships() {
   if (!db) return [];
   return db.select().from(mapOltGroups);
 }
+async function getMapDgoElements() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({
+    id: mapDgoElements.id,
+    equipmentId: mapDgoElements.equipmentId,
+    lat: mapDgoElements.lat,
+    lng: mapDgoElements.lng,
+    notes: mapDgoElements.notes,
+    createdAt: mapDgoElements.createdAt,
+    updatedAt: mapDgoElements.updatedAt,
+    equipmentName: equipments.name,
+    equipmentStatus: equipments.status
+  }).from(mapDgoElements).leftJoin(equipments, eq(mapDgoElements.equipmentId, equipments.id));
+  return rows;
+}
+async function getMapDgoElementById(id) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({
+    id: mapDgoElements.id,
+    equipmentId: mapDgoElements.equipmentId,
+    lat: mapDgoElements.lat,
+    lng: mapDgoElements.lng,
+    notes: mapDgoElements.notes,
+    createdAt: mapDgoElements.createdAt,
+    updatedAt: mapDgoElements.updatedAt,
+    equipmentName: equipments.name,
+    equipmentStatus: equipments.status,
+    totalPorts: equipments.totalPorts,
+    model: equipments.model,
+    ipAddress: equipments.ipAddress
+  }).from(mapDgoElements).leftJoin(equipments, eq(mapDgoElements.equipmentId, equipments.id)).where(eq(mapDgoElements.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+async function createMapDgoElement(data) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(mapDgoElements).values(data);
+  return result[0].insertId;
+}
+async function updateMapDgoElement(id, data) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(mapDgoElements).set({ ...data, updatedAt: /* @__PURE__ */ new Date() }).where(eq(mapDgoElements.id, id));
+}
+async function deleteMapDgoElement(id) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(mapDgoElements).where(eq(mapDgoElements.id, id));
+}
+async function getDgoSlotCableLinks(dgoElementId) {
+  const db = await getDb();
+  if (!db) return [];
+  const links = await db.select().from(dgoSlotCableLinks).where(eq(dgoSlotCableLinks.dgoElementId, dgoElementId));
+  if (links.length === 0) return [];
+  const slotIds = Array.from(new Set(links.map((l) => l.slotId)));
+  const routeIds = Array.from(new Set(links.map((l) => l.routeId)));
+  const allSlots = slotIds.length > 0 ? await db.select({ id: equipmentSlots.id, slotNumber: equipmentSlots.slotNumber, label: equipmentSlots.label }).from(equipmentSlots).where(sql`${equipmentSlots.id} IN (${sql.join(slotIds.map((id) => sql`${id}`), sql`, `)})`) : [];
+  const allRoutes = routeIds.length > 0 ? await db.select({
+    id: mapRoutes.id,
+    name: mapRoutes.name,
+    cableType: mapRoutes.cableType,
+    fiberCount: mapRoutes.fiberCount,
+    fromTubeId: mapRoutes.fromTubeId,
+    toTubeId: mapRoutes.toTubeId,
+    fromElementId: mapRoutes.fromElementId,
+    toElementId: mapRoutes.toElementId
+  }).from(mapRoutes).where(sql`${mapRoutes.id} IN (${sql.join(routeIds.map((id) => sql`${id}`), sql`, `)})`) : [];
+  const slotMap = new Map(allSlots.map((s) => [s.id, s]));
+  const routeMap = new Map(allRoutes.map((r) => [r.id, r]));
+  const ceoTubeIds = [];
+  const ctoTubeIds = [];
+  const elementIds = [];
+  for (const link of links) {
+    const route = routeMap.get(link.routeId);
+    if (!route) continue;
+    const tubeId = link.side === "in" ? route.toTubeId : route.fromTubeId;
+    const elemId = link.side === "in" ? route.toElementId : route.fromElementId;
+    if (tubeId) {
+      ceoTubeIds.push(tubeId);
+      ctoTubeIds.push(tubeId);
+    }
+    if (elemId) elementIds.push(elemId);
+  }
+  const ceoTubeRows = ceoTubeIds.length > 0 ? await db.select({ id: ceoTubes.id, identifier: ceoTubes.identifier, color: ceoTubes.color, ceoId: ceoTubes.ceoId }).from(ceoTubes).where(sql`${ceoTubes.id} IN (${sql.join(ceoTubeIds.map((id) => sql`${id}`), sql`, `)})`) : [];
+  const ctoTubeRows = ctoTubeIds.length > 0 ? await db.select({ id: ctoTubes.id, identifier: ctoTubes.identifier, color: ctoTubes.color, ctoId: ctoTubes.ctoId }).from(ctoTubes).where(sql`${ctoTubes.id} IN (${sql.join(ctoTubeIds.map((id) => sql`${id}`), sql`, `)})`) : [];
+  const elemRows = elementIds.length > 0 ? await db.select({ id: mapElements.id, type: mapElements.type, referenceId: mapElements.referenceId }).from(mapElements).where(sql`${mapElements.id} IN (${sql.join(elementIds.map((id) => sql`${id}`), sql`, `)})`) : [];
+  const ceoRefIds = elemRows.filter((e) => e.type === "ceo").map((e) => e.referenceId);
+  const ctoRefIds = elemRows.filter((e) => e.type === "cto").map((e) => e.referenceId);
+  const ceoNameRows = ceoRefIds.length > 0 ? await db.select({ id: ceos.id, name: ceos.name }).from(ceos).where(sql`${ceos.id} IN (${sql.join(ceoRefIds.map((id) => sql`${id}`), sql`, `)})`) : [];
+  const ctoNameRows = ctoRefIds.length > 0 ? await db.select({ id: ctos.id, name: ctos.name }).from(ctos).where(sql`${ctos.id} IN (${sql.join(ctoRefIds.map((id) => sql`${id}`), sql`, `)})`) : [];
+  const ceoTubeMap = new Map(ceoTubeRows.map((t2) => [t2.id, t2]));
+  const ctoTubeMap = new Map(ctoTubeRows.map((t2) => [t2.id, t2]));
+  const elemMap = new Map(elemRows.map((e) => [e.id, e]));
+  const ceoNameMap = new Map(ceoNameRows.map((c) => [c.id, c.name]));
+  const ctoNameMap = new Map(ctoNameRows.map((c) => [c.id, c.name]));
+  return links.map((link) => {
+    const slot = slotMap.get(link.slotId);
+    const route = routeMap.get(link.routeId);
+    const tubeId = route ? link.side === "in" ? route.toTubeId : route.fromTubeId : null;
+    const elemId = route ? link.side === "in" ? route.toElementId : route.fromElementId : null;
+    const ceoTubeRow = tubeId ? ceoTubeMap.get(tubeId) : null;
+    const ctoTubeRow = tubeId && !ceoTubeRow ? ctoTubeMap.get(tubeId) : null;
+    const tubeRow = ceoTubeRow ?? ctoTubeRow ?? null;
+    const tubeType = ceoTubeRow ? "ceo" : ctoTubeRow ? "cto" : null;
+    let autoTubeElementName = null;
+    let autoTubeElementType = null;
+    if (elemId) {
+      const elem = elemMap.get(elemId);
+      if (elem) {
+        autoTubeElementType = elem.type;
+        if (elem.type === "ceo") autoTubeElementName = ceoNameMap.get(elem.referenceId) ?? null;
+        else if (elem.type === "cto") autoTubeElementName = ctoNameMap.get(elem.referenceId) ?? null;
+      }
+    } else if (tubeRow) {
+      if (ceoTubeRow) {
+        autoTubeElementType = "ceo";
+        autoTubeElementName = ceoNameMap.get(ceoTubeRow.ceoId) ?? null;
+      } else if (ctoTubeRow) {
+        autoTubeElementType = "cto";
+        autoTubeElementName = ctoNameMap.get(ctoTubeRow.ctoId) ?? null;
+      }
+    }
+    return {
+      ...link,
+      slotLabel: slot?.label ?? null,
+      slotNumber: slot?.slotNumber ?? null,
+      routeName: route?.name ?? null,
+      cableType: route?.cableType ?? null,
+      fiberCount: route?.fiberCount ?? null,
+      autoTubeId: tubeRow?.id ?? null,
+      autoTubeIdentifier: tubeRow?.identifier ?? null,
+      autoTubeColor: tubeRow?.color ?? null,
+      autoTubeElementName,
+      autoTubeElementType
+    };
+  });
+}
+async function createDgoSlotCableLink(data) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(dgoSlotCableLinks).values(data);
+  return result[0].insertId;
+}
+async function deleteDgoSlotCableLink(id) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(dgoSlotCableLinks).where(eq(dgoSlotCableLinks.id, id));
+}
+async function addDgoToGroup(dgoId, groupId) {
+  const db = await getDb();
+  if (!db) return;
+  const exists = await db.select().from(mapDgoGroups).where(and(eq(mapDgoGroups.dgoId, dgoId), eq(mapDgoGroups.groupId, groupId)));
+  if (exists.length === 0) await db.insert(mapDgoGroups).values({ dgoId, groupId });
+}
+async function removeDgoFromGroup(dgoId, groupId) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(mapDgoGroups).where(and(eq(mapDgoGroups.dgoId, dgoId), eq(mapDgoGroups.groupId, groupId)));
+}
+async function getAllDgoGroupMemberships() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(mapDgoGroups);
+}
+async function getRouteExtraTubes(routeId) {
+  if (!_pool) return [];
+  const pool = _pool.promise();
+  const [rows] = await pool.execute(
+    `SELECT
+       ret.id,
+       ret.routeId,
+       ret.elementId,
+       ret.tubeId,
+       ret.side,
+       ret.notes,
+       ret.createdAt,
+       COALESCE(ct.identifier, ctt.identifier, CONCAT('Tubo #', ret.tubeId)) AS tubeIdentifier,
+       COALESCE(me.name, me.label, CONCAT('#', me.id)) AS elementName,
+       me.type AS elementType
+     FROM route_extra_tubes ret
+     LEFT JOIN map_elements me ON me.id = ret.elementId
+     LEFT JOIN ceo_tubes ct ON ct.id = ret.tubeId AND me.type = 'ceo'
+     LEFT JOIN cto_tubes ctt ON ctt.id = ret.tubeId AND me.type = 'cto'
+     WHERE ret.routeId = ?
+     ORDER BY ret.side, ret.id`,
+    [routeId]
+  );
+  return rows;
+}
+async function addRouteExtraTube(data) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(routeExtraTubes).values({
+    routeId: data.routeId,
+    elementId: data.elementId,
+    tubeId: data.tubeId,
+    side: data.side,
+    notes: data.notes ?? null
+  });
+  return result[0].insertId;
+}
+async function deleteRouteExtraTube(id) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(routeExtraTubes).where(eq(routeExtraTubes.id, id));
+}
+async function deleteRouteExtraTubesByRoute(routeId) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(routeExtraTubes).where(eq(routeExtraTubes.routeId, routeId));
+}
+async function getDgoPortLinks(dgoElementId) {
+  if (!_pool) return [];
+  const pool = _pool.promise();
+  const [rows] = await pool.execute(
+    `SELECT
+       dpl.id,
+       dpl.dgoElementId,
+       dpl.slotId,
+       dpl.portNumber,
+       dpl.ceoElementId,
+       dpl.notes,
+       -- CEO de passagem
+       COALESCE(ceo_me.name, ceo_me.label, CONCAT('CEO #', dpl.ceoElementId)) AS ceoName,
+       -- Porta do equipamento vinculado
+       dpl.portId,
+       p.portNumber AS portNumber_eq,
+       p.label AS portLabel,
+       p.equipmentId,
+       eq.name AS equipmentName,
+       eq.type AS equipmentType,
+       -- Equipamento conectado (lido automaticamente via ports.connectedTo*)
+       p.connectedToEquipmentId,
+       eq2.name AS connectedToEquipmentName,
+       p.connectedToPortId,
+       p2.portNumber AS connectedToPortNumber,
+       p2.label AS connectedToPortLabel
+     FROM dgo_port_links dpl
+     LEFT JOIN map_elements ceo_me ON ceo_me.id = dpl.ceoElementId
+     LEFT JOIN ports p ON p.id = dpl.portId
+     LEFT JOIN equipments eq ON eq.id = p.equipmentId
+     LEFT JOIN equipments eq2 ON eq2.id = p.connectedToEquipmentId
+     LEFT JOIN ports p2 ON p2.id = p.connectedToPortId
+     WHERE dpl.dgoElementId = ?
+     ORDER BY dpl.slotId, dpl.portNumber`,
+    [dgoElementId]
+  );
+  return rows;
+}
+async function upsertDgoPortLink(data) {
+  if (!_pool) throw new Error("DB not available");
+  const pool = _pool.promise();
+  const [existing] = await pool.execute(
+    `SELECT id FROM dgo_port_links WHERE dgoElementId = ? AND slotId = ? AND portNumber = ? LIMIT 1`,
+    [data.dgoElementId, data.slotId, data.portNumber]
+  );
+  if (existing.length > 0) {
+    await pool.execute(
+      `UPDATE dgo_port_links SET ceoElementId = ?, portId = ?, notes = ?, updatedAt = NOW() WHERE id = ?`,
+      [data.ceoElementId ?? null, data.portId ?? null, data.notes ?? null, existing[0].id]
+    );
+    return existing[0].id;
+  } else {
+    const [result] = await pool.execute(
+      `INSERT INTO dgo_port_links (dgoElementId, slotId, portNumber, ceoElementId, portId, notes) VALUES (?, ?, ?, ?, ?, ?)`,
+      [data.dgoElementId, data.slotId, data.portNumber, data.ceoElementId ?? null, data.portId ?? null, data.notes ?? null]
+    );
+    return result.insertId;
+  }
+}
+async function deleteDgoPortLink(id) {
+  if (!_pool) return;
+  await _pool.promise().execute(`DELETE FROM dgo_port_links WHERE id = ?`, [id]);
+}
+async function getPortsByEquipmentForDgo(equipmentId) {
+  if (!_pool) return [];
+  const pool = _pool.promise();
+  try {
+    const [rows] = await pool.execute(
+      `SELECT
+         p.id,
+         p.portNumber,
+         p.label,
+         p.slotId,
+         es.label AS slotLabel,
+         p.connectedToEquipmentId,
+         eq2.name AS connectedToEquipmentName,
+         COALESCE(p.txPowerDbm, eq2.txPowerDbm) AS connectedToEquipmentTxPowerDbm,
+         p.txPowerDbm AS portTxPowerDbm,
+         p.connectedToPortId,
+         p2.portNumber AS connectedToPortNumber,
+         es2.slotNumber AS connectedToSlotLabel
+       FROM ports p
+       LEFT JOIN equipment_slots es ON es.id = p.slotId
+       LEFT JOIN equipments eq2 ON eq2.id = p.connectedToEquipmentId
+       LEFT JOIN ports p2 ON p2.id = p.connectedToPortId
+       LEFT JOIN equipment_slots es2 ON es2.id = p2.slotId
+       WHERE p.equipmentId = ?
+       ORDER BY COALESCE(p.sortOrder, 0), CAST(p.portNumber AS UNSIGNED), p.portNumber`,
+      [equipmentId]
+    );
+    return rows;
+  } catch (err) {
+    console.error("[getPortsByEquipmentForDgo] SQL error:", err);
+    return [];
+  }
+}
+async function calculateOpticalBalanceFromDgo(input) {
+  const noResult = (msg) => ({
+    found: false,
+    rxPowerDbm: null,
+    txPowerDbm: null,
+    equipmentName: null,
+    totalLossDb: 0,
+    distanceKm: 0,
+    cableLossDb: 0,
+    splitterLossDb: 0,
+    fusionLossDb: 0,
+    signalQuality: "no_signal",
+    path: [],
+    warnings: [msg],
+    cableOutElementId: null
+  });
+  if (!_pool) return noResult("DB n\xE3o dispon\xEDvel");
+  const pool = _pool.promise();
+  const [portLinkRows] = await pool.execute(
+    `SELECT
+       dpl.portId,
+       p.connectedToEquipmentId,
+       p.txPowerDbm AS portTxPowerDbm,
+       eq.name AS equipmentName,
+       eq.txPowerDbm AS equipmentTxPowerDbm,
+       COALESCE(p.txPowerDbm, eq.txPowerDbm) AS effectiveTxPowerDbm
+     FROM dgo_port_links dpl
+     LEFT JOIN ports p ON p.id = dpl.portId
+     LEFT JOIN equipments eq ON eq.id = p.connectedToEquipmentId
+     WHERE dpl.dgoElementId = ? AND dpl.slotId = ? AND dpl.portNumber = ?
+     LIMIT 1`,
+    [input.dgoElementId, input.slotId, input.portNumber]
+  );
+  const portLinkRow = portLinkRows[0] ?? null;
+  const [dgoPortRows] = await pool.execute(
+    `SELECT
+       p.connectedToEquipmentId,
+       p.txPowerDbm AS portTxPowerDbm,
+       eq.name AS equipmentName,
+       eq.txPowerDbm AS equipmentTxPowerDbm,
+       COALESCE(p.txPowerDbm, eq.txPowerDbm) AS effectiveTxPowerDbm
+     FROM equipment_slots es
+     JOIN ports p ON p.slotId = es.id
+     JOIN map_dgo_elements mde ON mde.equipmentId = es.equipmentId
+     LEFT JOIN equipments eq ON eq.id = p.connectedToEquipmentId
+     WHERE mde.id = ? AND es.id = ?
+     ORDER BY COALESCE(p.sortOrder, 0), CAST(p.portNumber AS UNSIGNED), p.portNumber
+     LIMIT 100`,
+    [input.dgoElementId, input.slotId]
+  );
+  const dgoPortRow = dgoPortRows[input.portNumber - 1] ?? null;
+  let txPowerDbm = null;
+  let equipmentName = null;
+  if (portLinkRow?.effectiveTxPowerDbm != null) {
+    txPowerDbm = Number(portLinkRow.effectiveTxPowerDbm);
+    equipmentName = portLinkRow.equipmentName ?? null;
+  } else if (dgoPortRow?.effectiveTxPowerDbm != null) {
+    txPowerDbm = Number(dgoPortRow.effectiveTxPowerDbm);
+    equipmentName = dgoPortRow.equipmentName ?? null;
+  }
+  if (txPowerDbm === null) {
+    const eqName = portLinkRow?.equipmentName ?? dgoPortRow?.equipmentName ?? null;
+    return noResult(
+      eqName ? `Equipamento "${eqName}" n\xE3o tem Pot\xEAncia TX (dBm) cadastrada` : "Nenhum equipamento com Pot\xEAncia TX (dBm) vinculado a esta porta"
+    );
+  }
+  const [cableRows] = await pool.execute(
+    `SELECT
+       mr.id AS routeId,
+       mr.name AS routeName,
+       mr.fromElementId,
+       mr.toElementId,
+       dscl.side
+     FROM dgo_slot_cable_links dscl
+     JOIN map_routes mr ON mr.id = dscl.routeId
+     WHERE dscl.dgoElementId = ? AND dscl.slotId = ? AND dscl.side = 'out'
+     LIMIT 1`,
+    [input.dgoElementId, input.slotId]
+  );
+  const cableRow = cableRows[0] ?? null;
+  if (!cableRow) {
+    return { ...noResult("Nenhum cabo de sa\xEDda vinculado a esta bandeja"), txPowerDbm, equipmentName, cableOutElementId: null };
+  }
+  const cableOutElementId = cableRow.toElementId ?? cableRow.fromElementId ?? null;
+  if (!cableOutElementId) {
+    return { ...noResult("Cabo de sa\xEDda sem elemento destino configurado"), txPowerDbm, equipmentName, cableOutElementId: null };
+  }
+  const targetElementId = input.ctoElementId ?? cableOutElementId;
+  try {
+    const result = await calculateOpticalBalance(targetElementId, {
+      overrideTxPowerDbm: txPowerDbm,
+      overrideEquipmentName: equipmentName ?? "DGO"
+    });
+    return { ...result, txPowerDbm, equipmentName, cableOutElementId };
+  } catch (err) {
+    console.error("[calculateOpticalBalanceFromDgo] erro ao calcular balan\xE7o:", err);
+    return { ...noResult(`Erro ao calcular balan\xE7o: ${err.message}`), txPowerDbm, equipmentName, cableOutElementId };
+  }
+}
+async function getDgoSlotCtoBalances(input) {
+  if (!_pool) return [];
+  const pool = _pool.promise();
+  const [portLinkRows] = await pool.execute(
+    `SELECT
+       COALESCE(p.txPowerDbm, eq.txPowerDbm) AS effectiveTxPowerDbm,
+       eq.name AS equipmentName
+     FROM dgo_port_links dpl
+     LEFT JOIN ports p ON p.id = dpl.portId
+     LEFT JOIN equipments eq ON eq.id = p.connectedToEquipmentId
+     WHERE dpl.dgoElementId = ? AND dpl.slotId = ? AND dpl.portNumber = ?
+     LIMIT 1`,
+    [input.dgoElementId, input.slotId, input.portNumber]
+  );
+  const portLinkRow = portLinkRows[0] ?? null;
+  const [dgoPortRows] = await pool.execute(
+    `SELECT
+       COALESCE(p.txPowerDbm, eq.txPowerDbm) AS effectiveTxPowerDbm,
+       eq.name AS equipmentName
+     FROM equipment_slots es
+     JOIN ports p ON p.slotId = es.id
+     JOIN map_dgo_elements mde ON mde.equipmentId = es.equipmentId
+     LEFT JOIN equipments eq ON eq.id = p.connectedToEquipmentId
+     WHERE mde.id = ? AND es.id = ?
+     ORDER BY COALESCE(p.sortOrder, 0), CAST(p.portNumber AS UNSIGNED), p.portNumber
+     LIMIT 100`,
+    [input.dgoElementId, input.slotId]
+  );
+  const dgoPortRow = dgoPortRows[input.portNumber - 1] ?? null;
+  const txPowerDbm = portLinkRow?.effectiveTxPowerDbm != null ? Number(portLinkRow.effectiveTxPowerDbm) : dgoPortRow?.effectiveTxPowerDbm != null ? Number(dgoPortRow.effectiveTxPowerDbm) : null;
+  const equipmentName = portLinkRow?.equipmentName ?? dgoPortRow?.equipmentName ?? null;
+  if (txPowerDbm === null) return [];
+  const [cableRows] = await pool.execute(
+    `SELECT mr.fromElementId, mr.toElementId
+     FROM dgo_slot_cable_links dscl
+     JOIN map_routes mr ON mr.id = dscl.routeId
+     WHERE dscl.dgoElementId = ? AND dscl.slotId = ? AND dscl.side = 'out'
+     LIMIT 1`,
+    [input.dgoElementId, input.slotId]
+  );
+  const cableRow = cableRows[0] ?? null;
+  if (!cableRow) return [];
+  const cableOutElementId = cableRow.toElementId ?? cableRow.fromElementId ?? null;
+  if (!cableOutElementId) return [];
+  const [elemRows] = await pool.execute(
+    `SELECT me.id, me.type, me.referenceId,
+            COALESCE(ceo.name, cto.name) AS elementName
+     FROM map_elements me
+     LEFT JOIN ceos ceo ON ceo.id = me.referenceId AND me.type = 'ceo'
+     LEFT JOIN ctos cto ON cto.id = me.referenceId AND me.type = 'cto'
+     WHERE me.id = ?
+     LIMIT 1`,
+    [cableOutElementId]
+  );
+  const elemRow = elemRows[0] ?? null;
+  if (!elemRow) return [];
+  let ctoTargets = [];
+  if (elemRow.type === "cto") {
+    ctoTargets.push({ ctoElementId: elemRow.id, ctoName: elemRow.elementName ?? `CTO #${elemRow.id}` });
+  } else if (elemRow.type === "ceo") {
+    const [ctoRows] = await pool.execute(
+      `SELECT me.id AS ctoElementId, cto.name AS ctoName
+       FROM map_routes mr
+       JOIN map_elements me ON (
+         (mr.fromElementId = ? AND me.id = mr.toElementId) OR
+         (mr.toElementId = ? AND me.id = mr.fromElementId)
+       )
+       JOIN ctos cto ON cto.id = me.referenceId
+       WHERE me.type = 'cto'
+       ORDER BY cto.name`,
+      [cableOutElementId, cableOutElementId]
+    );
+    ctoTargets = ctoRows.map((r) => ({
+      ctoElementId: r.ctoElementId,
+      ctoName: r.ctoName ?? `CTO #${r.ctoElementId}`
+    }));
+  }
+  if (ctoTargets.length === 0) return [];
+  const results = [];
+  for (const target of ctoTargets) {
+    try {
+      const balance = await calculateOpticalBalance(target.ctoElementId, {
+        overrideTxPowerDbm: txPowerDbm,
+        overrideEquipmentName: equipmentName ?? "DGO"
+      });
+      results.push({ ctoElementId: target.ctoElementId, ctoName: target.ctoName, balance });
+    } catch (err) {
+      console.error(`[getDgoSlotCtoBalances] erro CTO #${target.ctoElementId}:`, err);
+    }
+  }
+  return results;
+}
 var _pool, _db, BALANCED_LOSS_DB, SPLITTER_LOSS_DB;
 var init_db = __esm({
   "server/db.ts"() {
     "use strict";
     init_schema();
     init_env();
+    init_tenantContext();
     init_schema();
     init_schema();
     init_schema();
@@ -4983,16 +5829,24 @@ var init_db = __esm({
 // server/_core/trpc.ts
 import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
 import superjson from "superjson";
-var t, router, publicProcedure, requireUser, protectedProcedure, adminProcedure;
+var t, router, injectTenantDb, publicProcedure, requireUser, protectedProcedure, adminProcedure;
 var init_trpc = __esm({
   "server/_core/trpc.ts"() {
     "use strict";
     init_const();
+    init_tenantContext();
     t = initTRPC.context().create({
       transformer: superjson
     });
     router = t.router;
-    publicProcedure = t.procedure;
+    injectTenantDb = t.middleware(async (opts) => {
+      const { ctx, next } = opts;
+      if (ctx.tenantDb) {
+        return runWithTenantDb(ctx.tenantDb, () => next({ ctx }));
+      }
+      return next({ ctx });
+    });
+    publicProcedure = t.procedure.use(injectTenantDb);
     requireUser = t.middleware(async (opts) => {
       const { ctx, next } = opts;
       if (!ctx.user) {
@@ -5005,8 +5859,8 @@ var init_trpc = __esm({
         }
       });
     });
-    protectedProcedure = t.procedure.use(requireUser);
-    adminProcedure = t.procedure.use(
+    protectedProcedure = t.procedure.use(injectTenantDb).use(requireUser);
+    adminProcedure = t.procedure.use(injectTenantDb).use(
       t.middleware(async (opts) => {
         const { ctx, next } = opts;
         if (!ctx.user || ctx.user.role !== "admin") {
@@ -5156,8 +6010,8 @@ async function saveSgpConfig2(cfg) {
   if (!db) throw new Error("DB not ready");
   await db.insert(appSettings).values({ key: "sgp_config", value }).onDuplicateKeyUpdate({ set: { value } });
 }
-async function sgpFetch2(cfg, path6, options = {}) {
-  const url = `${cfg.url.replace(/\/$/, "")}${path6}`;
+async function sgpFetch2(cfg, path7, options = {}) {
+  const url = `${cfg.url.replace(/\/$/, "")}${path7}`;
   const headers = {
     token: cfg.token,
     app: cfg.app,
@@ -5186,8 +6040,8 @@ async function sgpListOnus(cfg, oltId, params = {}) {
   const qs = new URLSearchParams(
     Object.entries(params).map(([k, v]) => [k, String(v)])
   ).toString();
-  const path6 = `/api/fttx/olt/${oltId}/onu/list/${qs ? "?" + qs : ""}`;
-  const res = await sgpFetch2(cfg, path6);
+  const path7 = `/api/fttx/olt/${oltId}/onu/list/${qs ? "?" + qs : ""}`;
+  const res = await sgpFetch2(cfg, path7);
   if (!res.ok) throw new Error(`SGP listOnus: ${res.status} ${res.statusText}`);
   const data = await res.json();
   return Array.isArray(data) ? data : data.results ?? data.data ?? [];
@@ -5416,7 +6270,7 @@ async function getGenieACSConfig() {
   const auth = authRow?.value || null;
   return { url, auth };
 }
-async function genieRequest(path6, method = "GET", body) {
+async function genieRequest(path7, method = "GET", body) {
   const { url, auth } = await getGenieACSConfig();
   const headers = {
     "Content-Type": "application/json"
@@ -5424,27 +6278,27 @@ async function genieRequest(path6, method = "GET", body) {
   if (auth) {
     headers["Authorization"] = `Basic ${auth}`;
   }
-  const response = await fetch(`${url}${path6}`, {
+  const response = await fetch(`${url}${path7}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : void 0,
     signal: AbortSignal.timeout(15e3)
   });
   if (!response.ok) {
-    const text3 = await response.text().catch(() => "");
-    throw new Error(`GenieACS API error ${response.status}: ${text3}`);
+    const text4 = await response.text().catch(() => "");
+    throw new Error(`GenieACS API error ${response.status}: ${text4}`);
   }
-  const text2 = await response.text();
-  if (!text2) return null;
+  const text3 = await response.text();
+  if (!text3) return null;
   try {
-    return JSON.parse(text2);
+    return JSON.parse(text3);
   } catch {
-    return text2;
+    return text3;
   }
 }
 function getParam(device, ...paths) {
-  for (const path6 of paths) {
-    const parts = path6.split(".");
+  for (const path7 of paths) {
+    const parts = path7.split(".");
     let obj = device;
     for (const part of parts) {
       if (!obj || typeof obj !== "object") {
@@ -6095,11 +6949,11 @@ function applyParams(lines, params) {
     (line) => line.replace(/\{([^}]+)\}/g, (_, key) => params[key] ?? `{${key}}`)
   );
 }
-function stripAnsi(text2) {
-  return text2.replace(/\x1b\[[0-9;]*[mGKJHABCDEFPSTfhilnpqrsu]/g, "").replace(/\x1b[()][A-Z0-9]/g, "").replace(/\x1b[=>]/g, "").replace(/\x1b\[\?[0-9;]*[hlr]/g, "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").replace(/\x1b./g, "");
+function stripAnsi(text3) {
+  return text3.replace(/\x1b\[[0-9;]*[mGKJHABCDEFPSTfhilnpqrsu]/g, "").replace(/\x1b[()][A-Z0-9]/g, "").replace(/\x1b[=>]/g, "").replace(/\x1b\[\?[0-9;]*[hlr]/g, "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").replace(/\x1b./g, "");
 }
-function detectsConfirmPrompt(text2) {
-  return CONFIRM_PATTERNS.some((p) => p.test(text2));
+function detectsConfirmPrompt(text3) {
+  return CONFIRM_PATTERNS.some((p) => p.test(text3));
 }
 function getActiveSession(sessionId) {
   return activeSessions.get(sessionId);
@@ -6284,7 +7138,7 @@ function serveStatic(app) {
     );
   }
   app.use(express.static(distPath));
-  app.use("*", (_req, res) => {
+  app.use((_req, res) => {
     res.sendFile(path3.resolve(distPath, "index.html"));
   });
 }
@@ -6302,12 +7156,12 @@ __export(webhookHandler_exports, {
   validateWebhookSignature: () => validateWebhookSignature
 });
 import crypto2 from "crypto";
-import { eq as eq12 } from "drizzle-orm";
+import { eq as eq13 } from "drizzle-orm";
 async function validateWebhookSignature(payload, signature) {
   try {
     const db = await getDb();
     if (!db) return false;
-    const rows = await db.select().from(systemSettings).where(eq12(systemSettings.key, "sgp_webhook_secret"));
+    const rows = await db.select().from(systemSettings).where(eq13(systemSettings.key, "sgp_webhook_secret"));
     if (rows.length === 0) {
       console.warn("[Webhook] Nenhum secret configurado \u2014 valida\xE7\xE3o desabilitada");
       return true;
@@ -6503,8 +7357,8 @@ var init_kmzIcons = __esm({
   "server/kmzIcons.ts"() {
     "use strict";
     KMZ_ICONS = {
-      "icons/cto.png": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAOUlEQVR4nO3OMREAIAwEwShBJ4qxEWoMkC/2Zq7fqoR6qAewdp+fAwAAAAAAAAAAAAAAAOQBJqqELomrZ2jjUJuqAAAAAElFTkSuQmCC",
-      "icons/ceo.png": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAmUlEQVR4nO3X0Q2AMAgEUPaPgzmJa+B/VTgQemnSJvxyL8a2VGSlpaonUn2hh1xQVWHCwR+QfHg2+AXCC48iWsJRBBTu7YIswm0A/lDpPhXhEQQOSG4lEzH2C2sjCKQvLK1EbMAGbMAagFkHkSdtP4oR7ZzLiHkdu19haFA+kIQQ2aLOhdTJ+NfbgPUweSAYTzMTY1RpaPe6AYv5yXizZGQ2AAAAAElFTkSuQmCC",
+      "icons/cto.png": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAoCAYAAACfKfiZAAAKG0lEQVR4nIWYTaxcV1LHf1Xn3O6+/fE+7Bj7OQ6yCdijGQmhDAgNBCyxi8SCjSPNYpBmtrCwNCPNAoITIQUk1iARIaQgIORrEaHxgk1ioSFiYQ2DRCAMOLHsjJPn8cd73a+7773nVLG4t/s9O0FzpNPd53bfe/71rzr/qmoBcHcREb969eqJpuHpmzf/x5544uTT28e3fn5xcODuLvfv32dvbw8AMyPGCICqAtDr9VBV39zclOVyeff999//garKzs6Onzl3jnNnz3Ly+PG6KIoPzp8/X9ENAbh06VJ466238h/80Ut/f+PGja/PDw4ckEEvAk5ZlsQYqaqKnBMgiMgaDLBehxBwd6qqQkQIMRJ7BUVRYGZWVfVHLvG/njz95L/+2Z/88csR4M0333QRYW86O9Nko+gPrG4acRG/t7tLkxLj8ZicM6oBcHLOHZDWEndfv4uIxBhVRDCcLO11M9PJZOPpu7ufPl3E+GvAn8YVFe7OcjGvNyZjptMpIahKCLgqiBJC7Kx03CHG0G0qfPGQ7lXRbhljAPPUNI1ky7cAV4ArV64AkHMt7hlVR8VJlqlyJpnRGQgY7tYBsfV27r5m4ZG1O2IgBiSHjIQQQk5pDviaAYCUcmeltL7EURFMBDPDzFD1R+gG56cNEWld4I65ta4MhQEtO4cAGq+qCncjpYQDbs6N/71BzrYGp6ptgIWAqq7Xjw5fby5yeM/qV0XU9AgAd5ecLTZNYrls2NvbYz5fgAgPHjxguVzgbl0wHc6UUgvWH2dCjkyOAG9jp0nZAdTd5aWXXnJgvLVx7OxiXmHZZTZd0NQZM8hmuGfcjZzbjTv3fo5qczAXED2chM7WgLugouSUFo/HgFVVlVLKqCqDwYDZbMbBwYymrrug4gss7W621kWiAZFHXbL67O44oEHZ3j7WP+oCB8rhaHgq54yZSVmWbEwmpJQ4f+ECk8kGOef/P9q/YL3y/WrGGNHumuEJkKMMuGVLqwe4O0WvR1mWDDY21v4/avFR6x4fh4HXBZ90cRCUnDKpaqaPu4CmaUTkkE53x7LRUFNV2inho/S2WqQIQhClVUftyI2oRtqQaL9zafPHZHO8BbACINMputpAVXBvfaUqh2DMVlK7TkIiAZHuuOnRUy0d3QEJLWgNAdyJRcF0Ovt0BUAAm0yYVnWNasCdtb9jjFhqaJqEWV6DWdEcYo8oh35eu0ZbkCEEtAioKKPRiJSSm2WKGAeARxExd5fX/u71P6ybenT37q4Nh0MFqJoaRBgOh2AJVTBr1c+9Rd4yAk3TkFLqNm0FZ+X/GCJlWbKxscHu7i45Z3r9vgBEdx9/43e/8cb9+w+ek1Da8eMn9LPPPmW6v8/m1gabmxuYZRQBFBHHEXDDRcEPM6MqZGuRSTY0ZLRT1ZQSTdMQQsDMUQkKEL/93e9+7ZM7P35uNj2wre2fURFlsVjQ6/dp6orlfMZgMGwfDORs63hQhxBkTbu7tLSoE0VwEcyNonPPYDBAVSmKyHw+m6mqa9nvXzx18lQKIVi/32OxOMA8M9kYMxj0qaoad8MsH9nIj5wEeURojo4gSlEU65xRFAXjjQmqSs6W3Z3YL4p/u337dhQhD8o+TRqysTEmRkVCD+n1aJoGOCy/VjHQMpK6U+Pr78PqqB6RiBACOWeiKjEWOB7cXfSFF154e+fUqe9tbW2F2WxmBwdTyrKk1+utk81KmMyMnI2UjKZJpNT6vs2UrejQpe4VQFWhKOIRYWrFQ5xhCMH1xRdflNf/4fXf+c1nL35nc7Jlk/GWbW8dZ1iO2Tl1mhh69Hp9BmWPEAMh9AihIISCGPvrz63wKCqREHqoKO6Cu3TAEyEE+r2e1E1NtjzIOU/0gw++IiKSvvq1X7164sQJK8uS4XDIeDxmOBwSi0iTGpbLJXVVU9cVdV3TNA11vSSlRIxxLbfZMiEqRa+3rhnKcsTGxjZnzjzFZLyBiDJfLCtgqV/+8n8IIJ/d+vGXEOktl0tPKZFzZrFYUNcNMQTkiCI6qyBs12sF7QTJrXVZCN3ahRgLVCMpG6pKqqsApJUU++693aqu605cOh920S6iWLY2zyPgYG6PSPQqAFfZLoRACJGgESEgKEEiKhEzo+j1JoCuk1GzbAQXsoEkayUZqFPDfD6nXxSd1db5NHfHKZNzRlSREAgaANagWiCdTLsRgoqboRq2gPE6e9y7tyvtTQEQ5vM5IvDw4R63bt+mLIeklNcJ6XPTbH3qVgVslzDW7MQYCSG4qrI/3a+BpO91N02n80a0fcRg0Gc+n5PNaFJaa0BOidRZbNZK7IqB1fCuGF0duaOipaLEGCXnTDkYHAOGawaOHdveaekKqHbVrgg5tfoNbYTn1HQAMtYBWbkkH0nXLRNd79BpQsoJQLIZMYYngJFeuHNHAE6cOPFznXC4iDAZT7jz6R1mswOGw2EX7YaZkNv+AlPFHSx7Nw031gWrmbcnomNkBVZEqJaVAnEdhGa2saI0pcRwNGS4HLG9vcWpk6c4OJh1LlUQ706Bthuak7M/tvkREF0HtYofFWGxXLK3XPraBQcHM191LyklzIzRaMTpJ8+QUmJ/f4qKAr6mv6W9pd4sk71t2+zoOx0z626qBVJVlS+r6giAxdzcHaFNIm5OTolsGekyXggBQTqhYS1Cq2kpt3rRNS2t74VsbXXVNE1bd6pS13Xv5kcflfrhhx+6iKDIcctGjFGULqG0XQZ0fb5oC64tt1r1967fSznT5NRZn3FPZEvknNZB6jiqXWOSc/ng3v5IL1y4IO7OdDp78ODe/Tzbe5hn+1N7cO8nPHywh7u4Odk1YKKEovByUNqoHHm/6BFiH7TAJWDeildbjrVFKTixUJzMYNBjNB560eunVNu8rhan10E4Ho+Gy2oeltUirKiNMVLVSVJK7Tl0QbUnvX6QnA3xJpkd/iviHkiNUKlhucFzwLKgYR8R55NPbpNzjsPhIN77SRNv3vjoIO7s7GRAzp07+/ayyqc/uX37eMq53N397JeqpqEshwchyA92d+/+StMs+2Ups16vf2u5XPxsvyxGrPLDujRvC1Qc6npKsQxMZ/d5WJbcunWTp546s7zwpV/4z9GweG259B9+rq0JIfD7ly8/9y///P3vPdw/4Jlnfvnq22/8zW+f3Dm7u3N658Qzz/zi9//yL/784l+9+upXfvTfP/qWJdifTkVExCzTVInkUFXLNh8AD/fv0+/389bm5hPf/Oa3Xvuti7/+TyKS4LAx4cqVK/ree+/ptWvX8ngwmE7GQ1GFUye2rjVN0mef/Y26qio2x6MPRCQD/w5cftyAnzb+9tW/BuDixYvx2rVr+XMMuLsAvPzyy1//+OOPq1deeeUfgeby5cvn33nnna133333h2fPnq2ef/553d7eVoDr17ubvwpcP/q0649cvH597G+88Xt+6dIlExEH+D/TeZovx34uVwAAAABJRU5ErkJggg==",
+      "icons/ceo.png": "iVBORw0KGgoAAAANSUhEUgAAAA8AAAAoCAYAAAAhf6DEAAAFhklEQVR4nHVWTYgU2xX+zv2pbvvH7rFnmjFNj4iijDBGXYib7CW4eYuZrHUhEUEGgwSEMDQuRHlvYTZZZ/cyLhISEiGShSGR8IhRA42OuhhwHEd7Rmm7qqvq1r33ZOFUZ+a170BBVcF3znfOd865l/DZCAA/fvy4/vDhw/0vX74st1qt01prHUXRv6enpz/Oz8/39u7d22NmIiIGAFpeXpYLCwv+/v37P3327NlvXr161dzY2NBKKbG1tYUwDFGr1dIDBw5snT59+hfnz5//dn5+Xt69e9epbrfLRMRv377t1Ov19uHDh9l7T+/evXN79uxBvV6Xx44dK6ytrf3o+fPn3zDzH4koZmYSnU7HExGiKCpnWcaFQoGHwyGiKJJKKVksFtFoNLharfJwOCwBKAJgABDbOYOZPQBiZjjnQEQgIlhrkaYpnHNERD4HjsBEBOccOefgnEP+j4gghMidQwhB2GEqf/HeI0kSMDOstXDOwXsPZob3HtZaKKUwBiYiZFkGAJBSImfwfQfe+3FwTssYMwJ772GMgRACcRzDGIMgCH4Y3Ov14JxDGIaI4xhJkmA4HOL169fo9XqoVqs/TNsYA+89nHNIkgRSSkgpYa0dozyqtjFGWGtJSolqtQqlFIIgQKVSQaVSQbPZRKVSGSmxCyyl9FprK6WEEAJCCDAz0jRFrnuu/Rj42rVrP+71eo1Pnz5xmqaUJMkoijEG1loYY8Yj3759+6uNjY3/rKys7NdakxCCcj13Vj2XbFfBarXaHq21iKIIYRhCSok0TeG9H9Hf6WgX+OLFi99++PBhJQiCv/T7/SnnHIQQxMzIsgzOOaRpCmstpJS7aRORv379+qN9+/a9996T956TJIH3HkopMDOUUiPJxgrmvRdJkqg0TZFlGYIggLUWSZIAAOI4RpZlX652EASeiDiXJaeZP9sTNZazAEDGGOm9pyzLRtGAzy3LzEiSBGma4vsmADAROWa2+QznY5nTlFJCKTVe7atXr04eOnRo7unTp43BYMDWWsqBeeQ0TWGMGdNZ1Gq1n5RKpd+GYdgQQpCUknLKeUcppUbOdkWu1+uNJEnWAdTCMAystWyMIWsttNYwxmA4HH65PVut1j+stX91zlX5s2vK95b3flfEscirq6tHHjx48PP19XWvtZbGGMRxDOccpJTIsmy0ScZyVkrJUqk0ycxSa41isYhyuQwhBLZbdaSxtRaDwUAtLy9LAKQWFxd/f+fOnZksyx6ura21pZTeGCPypeecgzEGWZbBe8/tdrvX7/c/0waAK1euDJ88eRK/efMGQRBASjna2wBARCSEQL/fL124cOHX7Xb777Ozs/+kxcXF6wB++eLFi1K321XVahVRFCGKIgghUC6XUalU8PHjR0xMTODIkSOIoghnzpz5Wg0Gg7n19fW9cRyj2WyO2jOveM5gcnISzIxHjx5Ba43jx48fUCdPnvxVsVj87/v37xeJaCo/n5xzJKVEEATQWnOxWEShUBi2Wq2/lcvlT4VC4c+jGVtZWTlx8+bN77rdroqiiIbDIYgIlUoFUkrfbDbFwsLCV5cuXfrDaNKWlpbE2bNnC0ePHn0yNTX1OwDUarU+NBoNVy6Xsb1RhNYaYRh2sywTp06d0ktLS0J0Oh0fx7EDQLVabSsMQ5w4ceLZzMxMUigU0O/3eTAYIAgCHDx4MADgz5075zqdjt957HGWZWtKKfbe61xGpZQHILTW3G63d7WY2Pmxubm5FgQBbW5uPvfed51zLssyycw0GAyidrv9GgA6nc7/bwaXL19mAJidne3NzMwkExMT3wkhes1mU87Nzf1renp6q1qt/mlycjLC9s0JX7J79+4dZWZ169atn924ceM2M9Pq6ur+XPed9j/UTXBShWwFwgAAAABJRU5ErkJggg==",
       "icons/pole.png": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAh0lEQVR4nO3VQQ7AIAhEUe9/sp6k12i3pgoCMkITJun6v7rQ1v60Rzhs9Go3+3liVGEGshfXhglITNyCcI9rELC4BAGPrxA5AOh4h4j5e+oUjsZnp1CAAhQgByDyIgq/ivM8RpGAIwguDkdI4jCEJu6OsMQHhAXSzRSfIiSQz7biSwwx1yh6L/TPXtHakYeNAAAAAElFTkSuQmCC",
       "icons/reserve.png": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAN0lEQVR4nO3OsQ0AIBADsQzL2OwCNQvwKXzS9U4aOkO9gJX9dQAAAAAAAAAAAAAAAIA+wEBp6AJWj6+ZnI61RwAAAABJRU5ErkJggg=="
     };
@@ -6531,8 +7385,8 @@ import "dotenv/config";
 import express2 from "express";
 import { createServer } from "http";
 import net from "net";
-import path5 from "path";
-import fs5 from "fs";
+import path6 from "path";
+import fs6 from "fs";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
 // server/_core/oauth.ts
@@ -6540,21 +7394,26 @@ init_const();
 init_db();
 
 // server/_core/cookies.ts
-function isSecureRequest(req) {
-  if (req.protocol === "https") return true;
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  if (!forwardedProto) return false;
-  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
-  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
+function isIpAddress(host) {
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true;
+  if (host.includes(":")) return true;
+  return false;
+}
+function isLocalHost(host) {
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
 }
 function getSessionCookieOptions(req) {
-  const secure = isSecureRequest(req);
+  const hostname = req.hostname ?? "";
+  const hasRealDomain = !isIpAddress(hostname) && !isLocalHost(hostname) && hostname.includes(".");
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const protoList = Array.isArray(forwardedProto) ? forwardedProto : (forwardedProto ?? "").split(",");
+  const isHttps = protoList.some((p) => p.trim().toLowerCase() === "https") || req.protocol === "https";
+  const useSecure = hasRealDomain && isHttps;
   return {
     httpOnly: true,
     path: "/",
-    // sameSite=none requer secure=true; em HTTP usar lax para compatibilidade
-    sameSite: secure ? "none" : "lax",
-    secure
+    sameSite: useSecure ? "none" : "lax",
+    secure: useSecure
   };
 }
 
@@ -6762,7 +7621,7 @@ var SDKServer = class {
     const sessionUserId = session.openId;
     const signedInAt = /* @__PURE__ */ new Date();
     let user = await getUserByOpenId(sessionUserId);
-    if (!user) {
+    if (!user && ENV.oAuthServerUrl) {
       try {
         const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
         await upsertUser({
@@ -6836,6 +7695,7 @@ init_const();
 import { compare, hash } from "bcryptjs";
 import { eq as eq2 } from "drizzle-orm";
 init_db();
+init_tenantContext();
 init_schema();
 function registerLocalAuthRoutes(app) {
   app.post("/api/local-login", async (req, res) => {
@@ -6844,29 +7704,37 @@ function registerLocalAuthRoutes(app) {
       if (!email || !password) {
         return res.status(400).json({ error: "Email e senha s\xE3o obrigat\xF3rios" });
       }
-      const user = await getUserByEmail(email.trim().toLowerCase());
-      if (!user || !user.passwordHash) {
-        return res.status(401).json({ error: "Usu\xE1rio ou senha inv\xE1lidos" });
+      const tenantDb = req.tenantDb;
+      const doLogin = async () => {
+        const user = await getUserByEmail(email.trim().toLowerCase());
+        if (!user || !user.passwordHash) {
+          return res.status(401).json({ error: "Usu\xE1rio ou senha inv\xE1lidos" });
+        }
+        const valid = await compare(password, user.passwordHash);
+        if (!valid) {
+          return res.status(401).json({ error: "Usu\xE1rio ou senha inv\xE1lidos" });
+        }
+        const sessionToken = await sdk.signSession(
+          { openId: user.openId, appId: "local", name: user.name || user.email || "usuario" },
+          { expiresInMs: ONE_YEAR_MS }
+        );
+        await upsertUser({ openId: user.openId, lastSignedIn: /* @__PURE__ */ new Date() });
+        const cookieOptions = getSessionCookieOptions(req);
+        res.cookie(COOKIE_NAME, sessionToken, {
+          ...cookieOptions,
+          maxAge: ONE_YEAR_MS
+        });
+        return res.json({
+          ok: true,
+          mustChangePassword: user.mustChangePassword === true,
+          user: { id: user.id, name: user.name, email: user.email, role: user.role }
+        });
+      };
+      if (tenantDb) {
+        return await runWithTenantDb(tenantDb, doLogin);
+      } else {
+        return await doLogin();
       }
-      const valid = await compare(password, user.passwordHash);
-      if (!valid) {
-        return res.status(401).json({ error: "Usu\xE1rio ou senha inv\xE1lidos" });
-      }
-      const sessionToken = await sdk.signSession(
-        { openId: user.openId, appId: "local", name: user.name || user.email || "usuario" },
-        { expiresInMs: ONE_YEAR_MS }
-      );
-      await upsertUser({ openId: user.openId, lastSignedIn: /* @__PURE__ */ new Date() });
-      const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, {
-        ...cookieOptions,
-        maxAge: ONE_YEAR_MS
-      });
-      return res.json({
-        ok: true,
-        mustChangePassword: user.mustChangePassword === true,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role }
-      });
     } catch (err) {
       console.error("[local-login] erro:", err);
       return res.status(500).json({ error: "Erro interno no servidor" });
@@ -6892,20 +7760,28 @@ function registerLocalAuthRoutes(app) {
       } catch {
         return res.status(401).json({ error: "Sess\xE3o inv\xE1lida" });
       }
-      const db = await getDb();
-      if (!db) return res.status(503).json({ error: "Banco de dados indispon\xEDvel" });
-      const rows = await db.select().from(users).where(eq2(users.openId, sessionData.openId)).limit(1);
-      const user = rows[0];
-      if (!user || !user.passwordHash) {
-        return res.status(404).json({ error: "Usu\xE1rio n\xE3o encontrado" });
+      const tenantDb = req.tenantDb;
+      const doChangePassword = async () => {
+        const db = await getDb();
+        if (!db) return res.status(503).json({ error: "Banco de dados indispon\xEDvel" });
+        const rows = await db.select().from(users).where(eq2(users.openId, sessionData.openId)).limit(1);
+        const user = rows[0];
+        if (!user || !user.passwordHash) {
+          return res.status(404).json({ error: "Usu\xE1rio n\xE3o encontrado" });
+        }
+        const valid = await compare(currentPassword, user.passwordHash);
+        if (!valid) {
+          return res.status(401).json({ error: "Senha atual incorreta" });
+        }
+        const newHash = await hash(newPassword, 12);
+        await db.update(users).set({ passwordHash: newHash, mustChangePassword: false }).where(eq2(users.id, user.id));
+        return res.json({ ok: true });
+      };
+      if (tenantDb) {
+        return await runWithTenantDb(tenantDb, doChangePassword);
+      } else {
+        return await doChangePassword();
       }
-      const valid = await compare(currentPassword, user.passwordHash);
-      if (!valid) {
-        return res.status(401).json({ error: "Senha atual incorreta" });
-      }
-      const newHash = await hash(newPassword, 12);
-      await db.update(users).set({ passwordHash: newHash, mustChangePassword: false }).where(eq2(users.id, user.id));
-      return res.json({ ok: true });
     } catch (err) {
       console.error("[local-change-password] erro:", err);
       return res.status(500).json({ error: "Erro interno no servidor" });
@@ -7531,7 +8407,7 @@ import * as snmp from "net-snmp";
 
 // server/telegram.ts
 var TELEGRAM_API = "https://api.telegram.org";
-async function sendTelegramMessage(config, text2, parseMode = "HTML") {
+async function sendTelegramMessage(config, text3, parseMode = "HTML") {
   if (!config.botToken || !config.chatId) {
     return { ok: false, error: "Bot token ou Chat ID n\xE3o configurado" };
   }
@@ -7542,7 +8418,7 @@ async function sendTelegramMessage(config, text2, parseMode = "HTML") {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: config.chatId,
-        text: text2,
+        text: text3,
         parse_mode: parseMode,
         disable_web_page_preview: true
       })
@@ -7831,7 +8707,7 @@ async function processAlerts(ps, result, telegramConfig) {
         thresholdValue: check.thresholdValue
       });
       if (telegramConfig) {
-        const text2 = buildAlertMessage({
+        const text3 = buildAlertMessage({
           sourceName: ps.name,
           sourceLocation: ps.location,
           alertType: check.alertType,
@@ -7840,7 +8716,7 @@ async function processAlerts(ps, result, telegramConfig) {
           thresholdValue: check.thresholdValue,
           message: check.message
         });
-        await sendTelegramMessage(telegramConfig, text2).catch(
+        await sendTelegramMessage(telegramConfig, text3).catch(
           (e) => console.error("[Telegram] Falha ao enviar alerta:", e)
         );
       }
@@ -7848,12 +8724,12 @@ async function processAlerts(ps, result, telegramConfig) {
     } else if (!check.violated && alreadyActive) {
       await resolveAlertsByTypeAndSource(ps.id, check.alertType);
       if (telegramConfig) {
-        const text2 = buildResolvedMessage({
+        const text3 = buildResolvedMessage({
           sourceName: ps.name,
           alertType: check.alertType,
           currentValue: check.currentValue
         });
-        await sendTelegramMessage(telegramConfig, text2).catch(
+        await sendTelegramMessage(telegramConfig, text3).catch(
           (e) => console.error("[Telegram] Falha ao enviar resolu\xE7\xE3o:", e)
         );
       }
@@ -7872,7 +8748,7 @@ async function processAlerts(ps, result, telegramConfig) {
         thresholdValue: null
       });
       if (telegramConfig) {
-        const text2 = buildAlertMessage({
+        const text3 = buildAlertMessage({
           sourceName: ps.name,
           sourceLocation: ps.location,
           alertType: "snmp_unreachable",
@@ -7881,7 +8757,7 @@ async function processAlerts(ps, result, telegramConfig) {
           thresholdValue: null,
           message: `Equipamento n\xE3o responde via SNMP: ${result.error}`
         });
-        await sendTelegramMessage(telegramConfig, text2).catch(() => {
+        await sendTelegramMessage(telegramConfig, text3).catch(() => {
         });
       }
     }
@@ -7890,8 +8766,8 @@ async function processAlerts(ps, result, telegramConfig) {
     if (alreadyActive) {
       await resolveAlertsByTypeAndSource(ps.id, "snmp_unreachable");
       if (telegramConfig) {
-        const text2 = buildResolvedMessage({ sourceName: ps.name, alertType: "snmp_unreachable", currentValue: null });
-        await sendTelegramMessage(telegramConfig, text2).catch(() => {
+        const text3 = buildResolvedMessage({ sourceName: ps.name, alertType: "snmp_unreachable", currentValue: null });
+        await sendTelegramMessage(telegramConfig, text3).catch(() => {
         });
       }
     }
@@ -7966,9 +8842,9 @@ var REGION_ENDPOINTS = {
   cn: "https://openapi.tuyacn.com",
   in: "https://openapi.tuyain.com"
 };
-function generateSign(accessId, accessSecret, t2, nonce, token, method, path6, body = "") {
+function generateSign(accessId, accessSecret, t2, nonce, token, method, path7, body = "") {
   const contentHash = crypto.createHash("sha256").update(body).digest("hex");
-  const stringToSign = [method, contentHash, "", path6].join("\n");
+  const stringToSign = [method, contentHash, "", path7].join("\n");
   const signStr = accessId + token + t2 + nonce + stringToSign;
   return crypto.createHmac("sha256", accessSecret).update(signStr).digest("hex").toUpperCase();
 }
@@ -7981,9 +8857,9 @@ async function getAccessToken(config) {
   const baseUrl = REGION_ENDPOINTS[config.region] ?? REGION_ENDPOINTS.us;
   const t2 = Date.now();
   const nonce = crypto.randomBytes(8).toString("hex");
-  const path6 = "/v1.0/token?grant_type=1";
-  const sign = generateSign(config.accessId, config.accessSecret, t2, nonce, "", "GET", path6);
-  const res = await fetch(`${baseUrl}${path6}`, {
+  const path7 = "/v1.0/token?grant_type=1";
+  const sign = generateSign(config.accessId, config.accessSecret, t2, nonce, "", "GET", path7);
+  const res = await fetch(`${baseUrl}${path7}`, {
     method: "GET",
     headers: {
       "client_id": config.accessId,
@@ -8006,9 +8882,9 @@ async function getTuyaDeviceStatus(config, deviceId) {
   const baseUrl = REGION_ENDPOINTS[config.region] ?? REGION_ENDPOINTS.us;
   const t2 = Date.now();
   const nonce = crypto.randomBytes(8).toString("hex");
-  const path6 = `/v1.0/devices/${deviceId}/status`;
-  const sign = generateSign(config.accessId, config.accessSecret, t2, nonce, token, "GET", path6);
-  const res = await fetch(`${baseUrl}${path6}`, {
+  const path7 = `/v1.0/devices/${deviceId}/status`;
+  const sign = generateSign(config.accessId, config.accessSecret, t2, nonce, token, "GET", path7);
+  const res = await fetch(`${baseUrl}${path7}`, {
     method: "GET",
     headers: {
       "client_id": config.accessId,
@@ -8243,11 +9119,11 @@ async function syncDevicesFromTuya(accountId) {
   let lastRowKey = "";
   let hasMore = true;
   while (hasMore) {
-    const path6 = `/v1.0/iot-01/associated-users/devices?last_row_key=${encodeURIComponent(lastRowKey)}&page_size=100`;
+    const path7 = `/v1.0/iot-01/associated-users/devices?last_row_key=${encodeURIComponent(lastRowKey)}&page_size=100`;
     const t2 = Date.now();
     const nonce = crypto.randomBytes(8).toString("hex");
-    const sign = generateSign(config.accessId, config.accessSecret, t2, nonce, token, "GET", path6.split("?")[0]);
-    const res = await fetch(`${baseUrl}${path6}`, {
+    const sign = generateSign(config.accessId, config.accessSecret, t2, nonce, token, "GET", path7.split("?")[0]);
+    const res = await fetch(`${baseUrl}${path7}`, {
       method: "GET",
       headers: {
         "client_id": config.accessId,
@@ -9981,6 +10857,8 @@ var appRouter = router({
       powerSourceId: z5.number().optional().nullable(),
       voltage: z5.number().optional().nullable(),
       powerConsumptionW: z5.number().optional().nullable(),
+      // Campo óptico
+      txPowerDbm: z5.number().optional().nullable(),
       // Campos de rede
       vlan: z5.number().int().min(1).max(4094).optional().nullable(),
       interfaceIp: z5.string().optional().nullable(),
@@ -10036,6 +10914,8 @@ var appRouter = router({
       powerSourceId: z5.number().optional().nullable(),
       voltage: z5.number().optional().nullable(),
       powerConsumptionW: z5.number().optional().nullable(),
+      // Campo óptico
+      txPowerDbm: z5.number().optional().nullable(),
       // Campos de rede
       vlan: z5.number().int().min(1).max(4094).optional().nullable(),
       interfaceIp: z5.string().optional().nullable(),
@@ -10107,7 +10987,8 @@ var appRouter = router({
       notes: z5.string().optional(),
       sortOrder: z5.number().optional(),
       connectedToEquipmentId: z5.number().optional().nullable(),
-      connectedToPortId: z5.number().optional().nullable()
+      connectedToPortId: z5.number().optional().nullable(),
+      txPowerDbm: z5.number().optional().nullable()
     })).mutation(async ({ input, ctx }) => {
       const newPort = await createPort(input);
       if (input.connectedToPortId && newPort) {
@@ -10160,7 +11041,8 @@ var appRouter = router({
       sortOrder: z5.number().optional(),
       slotId: z5.number().optional().nullable(),
       connectedToEquipmentId: z5.number().optional().nullable(),
-      connectedToPortId: z5.number().optional().nullable()
+      connectedToPortId: z5.number().optional().nullable(),
+      txPowerDbm: z5.number().optional().nullable()
     })).mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
       const prevPort = await getPortById(id);
@@ -10580,13 +11462,13 @@ var appRouter = router({
         const db = await (await Promise.resolve().then(() => (init_db(), db_exports))).getDb();
         if (db) {
           const { ceoViaAssociations: ceoViaAssociations2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-          const { eq: eq13, or: or2, and: and5 } = await import("drizzle-orm");
+          const { eq: eq14, or: or2, and: and5 } = await import("drizzle-orm");
           await db.delete(ceoViaAssociations2).where(
             and5(
-              eq13(ceoViaAssociations2.ceoId, input.ceoId),
+              eq14(ceoViaAssociations2.ceoId, input.ceoId),
               or2(
-                eq13(ceoViaAssociations2.sourceViaId, input.viaId),
-                eq13(ceoViaAssociations2.targetViaId, input.viaId)
+                eq14(ceoViaAssociations2.sourceViaId, input.viaId),
+                eq14(ceoViaAssociations2.targetViaId, input.viaId)
               )
             )
           );
@@ -10701,6 +11583,24 @@ var appRouter = router({
         targetViaId: input.targetViaId,
         notes: input.notes ?? null
       });
+      const db = await (await Promise.resolve().then(() => (init_db(), db_exports))).getDb();
+      if (db) {
+        const { ceoVias: ceoVias2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+        const { eq: eq14 } = await import("drizzle-orm");
+        if (input.sourceType === "splitter" && input.targetType === "tube") {
+          const { ceoSplitterVias: ceoSplitterVias2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+          const [splVia] = await db.select().from(ceoSplitterVias2).where(eq14(ceoSplitterVias2.id, input.sourceViaId)).limit(1);
+          if (splVia) {
+            await db.update(ceoVias2).set({ fusedToSplitterId: splVia.splitterId, fusedToSplitterViaId: input.sourceViaId, fusedToTubeId: null, fusedToViaId: null }).where(eq14(ceoVias2.id, input.targetViaId));
+          }
+        } else if (input.sourceType === "tube" && input.targetType === "splitter") {
+          const { ceoSplitterVias: ceoSplitterVias2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+          const [splVia] = await db.select().from(ceoSplitterVias2).where(eq14(ceoSplitterVias2.id, input.targetViaId)).limit(1);
+          if (splVia) {
+            await db.update(ceoVias2).set({ fusedToSplitterId: splVia.splitterId, fusedToSplitterViaId: input.targetViaId, fusedToTubeId: null, fusedToViaId: null }).where(eq14(ceoVias2.id, input.sourceViaId));
+          }
+        }
+      }
       return { id };
     }),
     delete: protectedProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ input }) => deleteViaAssociation(input.id)),
@@ -10835,7 +11735,7 @@ var appRouter = router({
       const openId = `local:${input.email.trim().toLowerCase()}`;
       const { getDb: getDb2 } = await Promise.resolve().then(() => (init_db(), db_exports));
       const { users: usersTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { eq: eq13 } = await import("drizzle-orm");
+      const { eq: eq14 } = await import("drizzle-orm");
       const dbConn = await getDb2();
       if (!dbConn) throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR", message: "DB indispon\xEDvel" });
       await dbConn.insert(usersTable).values({
@@ -10858,10 +11758,10 @@ var appRouter = router({
       const passwordHash = await hash2(input.newPassword, 12);
       const { getDb: getDb2 } = await Promise.resolve().then(() => (init_db(), db_exports));
       const { users: usersTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { eq: eq13 } = await import("drizzle-orm");
+      const { eq: eq14 } = await import("drizzle-orm");
       const dbConn = await getDb2();
       if (!dbConn) throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR", message: "DB indispon\xEDvel" });
-      await dbConn.update(usersTable).set({ passwordHash, mustChangePassword: true }).where(eq13(usersTable.id, input.userId));
+      await dbConn.update(usersTable).set({ passwordHash, mustChangePassword: true }).where(eq14(usersTable.id, input.userId));
       return { success: true };
     })
   }),
@@ -10928,7 +11828,19 @@ var appRouter = router({
   // ─── Configurações do Sistema ────────────────────────────────────────────────
   systemConfig: router({
     get: publicProcedure.query(async () => {
-      return getSystemSettings();
+      const settings = await getSystemSettings();
+      if (process.env.HIDE_PROVIDERS === "true") {
+        try {
+          const hidden = JSON.parse(settings.hiddenMenus ?? "[]");
+          if (!hidden.includes("/admin/provedores")) {
+            hidden.push("/admin/provedores");
+            settings.hiddenMenus = JSON.stringify(hidden);
+          }
+        } catch {
+          settings.hiddenMenus = JSON.stringify(["/admin/provedores"]);
+        }
+      }
+      return settings;
     }),
     save: adminProcedure.input(z5.object({
       systemName: z5.string().optional(),
@@ -11638,11 +12550,11 @@ Integra\xE7\xE3o com Telegram configurada com sucesso!
       const routes = await getMapRoutes();
       const route = routes.find((r) => r.id === id);
       if (!route) throw new TRPCError5({ code: "NOT_FOUND", message: "Rota n\xE3o encontrada" });
-      const path6 = route.path ? JSON.parse(route.path) : [];
-      if (path6.length < 2) throw new TRPCError5({ code: "BAD_REQUEST", message: "Tra\xE7ado insuficiente para dividir" });
-      const clampedIdx = Math.max(1, Math.min(splitPointIndex, path6.length - 2));
-      const path1 = path6.slice(0, clampedIdx + 1);
-      const path22 = path6.slice(clampedIdx);
+      const path7 = route.path ? JSON.parse(route.path) : [];
+      if (path7.length < 2) throw new TRPCError5({ code: "BAD_REQUEST", message: "Tra\xE7ado insuficiente para dividir" });
+      const clampedIdx = Math.max(1, Math.min(splitPointIndex, path7.length - 2));
+      const path1 = path7.slice(0, clampedIdx + 1);
+      const path22 = path7.slice(clampedIdx);
       await updateMapRoute(id, {
         path: JSON.stringify(path1),
         toElementId: elementId
@@ -11789,9 +12701,9 @@ ${fiberFolder}
         const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
         return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
       };
-      const calcLen = (path6) => {
+      const calcLen = (path7) => {
         let d = 0;
-        for (let i = 1; i < path6.length; i++) d += haversine(path6[i - 1], path6[i]);
+        for (let i = 1; i < path7.length; i++) d += haversine(path7[i - 1], path7[i]);
         return d;
       };
       const rows = allRoutes.map((r) => {
@@ -11799,12 +12711,12 @@ ${fiberFolder}
         const toEl = allElements.find((e) => e.id === r.toElementId);
         const fromRef = fromEl?.type === "cto" ? allCtos.find((c) => c.id === fromEl?.referenceId) : allCeos.find((c) => c.id === fromEl?.referenceId);
         const toRef = toEl?.type === "cto" ? allCtos.find((c) => c.id === toEl?.referenceId) : allCeos.find((c) => c.id === toEl?.referenceId);
-        let path6 = [];
+        let path7 = [];
         try {
-          if (r.path) path6 = JSON.parse(r.path);
+          if (r.path) path7 = JSON.parse(r.path);
         } catch {
         }
-        const lenKm = path6.length >= 2 ? calcLen(path6) : null;
+        const lenKm = path7.length >= 2 ? calcLen(path7) : null;
         const lenM = lenKm != null ? lenKm * 1e3 : null;
         const routeGroupIds = allRouteGroups.filter((rg) => Number(rg.routeId) === Number(r.id)).map((rg) => Number(rg.groupId));
         const routeGroupNames = routeGroupIds.map((gid) => allGroups.find((g) => Number(g.id) === gid)?.name ?? "?").join("; ");
@@ -11818,7 +12730,7 @@ ${fiberFolder}
           comprimento_km: lenKm != null ? lenKm.toFixed(3) : "\u2014",
           comprimento_m: lenM != null ? Math.round(lenM) : 0,
           status: !fromEl || !toEl ? "Solto" : "Conectado",
-          pontos: Number(path6.length),
+          pontos: Number(path7.length),
           notas: String(r.notes ?? ""),
           grupos: String(routeGroupNames || "Sem grupo"),
           groupIds: routeGroupIds
@@ -11874,6 +12786,22 @@ ${fiberFolder}
       return dbMod.getRoutesOccupancy();
     }),
     tubesByElement: publicProcedure.input(z5.object({ elementId: z5.number() })).query(async ({ input }) => getTubesByMapElement(input.elementId)),
+    // ─── Tubos extras por cabo (múltiplos tubos de origem/destino) ───────────
+    routeExtraTubes: protectedProcedure.input(z5.object({ routeId: z5.number() })).query(({ input }) => getRouteExtraTubes(input.routeId)),
+    addRouteExtraTube: adminProcedure.input(z5.object({
+      routeId: z5.number(),
+      elementId: z5.number(),
+      tubeId: z5.number(),
+      side: z5.enum(["from", "to"]),
+      notes: z5.string().optional()
+    })).mutation(async ({ input }) => {
+      const id = await addRouteExtraTube(input);
+      return { id };
+    }),
+    deleteRouteExtraTube: adminProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ input }) => {
+      await deleteRouteExtraTube(input.id);
+      return { ok: true };
+    }),
     traceOtdr: protectedProcedure.input(z5.object({
       elementId: z5.number(),
       // map_elements.id do ponto de partida
@@ -11954,11 +12882,115 @@ ${fiberFolder}
       return { ok: true };
     }),
     opticalBalance: protectedProcedure.input(z5.object({ ctoElementId: z5.number() })).query(({ input }) => calculateOpticalBalance(input.ctoElementId)),
+    dgoPortOpticalBalance: protectedProcedure.input(z5.object({
+      dgoElementId: z5.number(),
+      slotId: z5.number(),
+      portNumber: z5.number(),
+      ctoElementId: z5.number().optional()
+    })).query(({ input }) => calculateOpticalBalanceFromDgo(input)),
+    dgoSlotCtoBalances: protectedProcedure.input(z5.object({
+      dgoElementId: z5.number(),
+      slotId: z5.number(),
+      portNumber: z5.number()
+    })).query(({ input }) => getDgoSlotCtoBalances(input)),
+    dgoPortFiberLinks: protectedProcedure.input(z5.object({ dgoElementId: z5.number() })).query(({ input }) => getDgoPortFiberLinks(input.dgoElementId)),
+    createDgoPortFiberLink: adminProcedure.input(z5.object({
+      dgoElementId: z5.number(),
+      portId: z5.number(),
+      txPowerDbm: z5.number().nullable().optional(),
+      ceoElementId: z5.number(),
+      tubeId: z5.number(),
+      viaNumber: z5.number().int().min(1),
+      notes: z5.string().optional()
+    })).mutation(async ({ input }) => {
+      const id = await createDgoPortFiberLink(input);
+      return { id };
+    }),
+    updateDgoPortFiberLink: adminProcedure.input(z5.object({
+      id: z5.number(),
+      txPowerDbm: z5.number().nullable().optional(),
+      ceoElementId: z5.number().optional(),
+      tubeId: z5.number().optional(),
+      viaNumber: z5.number().int().min(1).optional(),
+      notes: z5.string().nullable().optional()
+    })).mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await updateDgoPortFiberLink(id, data);
+      return { ok: true };
+    }),
+    deleteDgoPortFiberLink: adminProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ input }) => {
+      await deleteDgoPortFiberLink(input.id);
+      return { ok: true };
+    }),
     portsByOltElement: publicProcedure.input(z5.object({ oltElementId: z5.number() })).query(async ({ input }) => {
       const olt = await getMapOltElementById(input.oltElementId);
       if (!olt) return [];
       return getPortsByEquipment(olt.equipmentId);
-    })
+    }),
+    // ─── DGO no Mapa ─────────────────────────────────────────────────────────
+    dgoElements: protectedProcedure.query(() => getMapDgoElements()),
+    dgoElementById: protectedProcedure.input(z5.object({ id: z5.number() })).query(({ input }) => getMapDgoElementById(input.id)),
+    createDgoElement: adminProcedure.input(z5.object({
+      equipmentId: z5.number(),
+      lat: z5.number(),
+      lng: z5.number(),
+      notes: z5.string().optional()
+    })).mutation(async ({ input }) => {
+      const id = await createMapDgoElement(input);
+      return { id };
+    }),
+    updateDgoElement: adminProcedure.input(z5.object({
+      id: z5.number(),
+      lat: z5.number().optional(),
+      lng: z5.number().optional(),
+      notes: z5.string().nullable().optional()
+    })).mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await updateMapDgoElement(id, data);
+      return { ok: true };
+    }),
+    deleteDgoElement: adminProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ input }) => {
+      await deleteMapDgoElement(input.id);
+      return { ok: true };
+    }),
+    dgoSlotLinks: protectedProcedure.input(z5.object({ dgoElementId: z5.number() })).query(({ input }) => getDgoSlotCableLinks(input.dgoElementId)),
+    createDgoSlotLink: adminProcedure.input(z5.object({
+      dgoElementId: z5.number(),
+      slotId: z5.number(),
+      routeId: z5.number(),
+      side: z5.enum(["in", "out"]),
+      notes: z5.string().optional()
+    })).mutation(async ({ input }) => {
+      const id = await createDgoSlotCableLink(input);
+      return { id };
+    }),
+    deleteDgoSlotLink: adminProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ input }) => {
+      await deleteDgoSlotCableLink(input.id);
+      return { ok: true };
+    }),
+    slotsByDgoElement: protectedProcedure.input(z5.object({ dgoElementId: z5.number() })).query(async ({ input }) => {
+      const dgo = await getMapDgoElementById(input.dgoElementId);
+      if (!dgo) return [];
+      return getSlotsByEquipment(dgo.equipmentId);
+    }),
+    // ─── Vinculação Porta DGO → CEO passagem + Equipamento ─────────────────────
+    dgoPortLinks: protectedProcedure.input(z5.object({ dgoElementId: z5.number() })).query(({ input }) => getDgoPortLinks(input.dgoElementId)),
+    upsertDgoPortLink: adminProcedure.input(z5.object({
+      dgoElementId: z5.number(),
+      slotId: z5.number(),
+      portNumber: z5.number().int().min(1),
+      ceoElementId: z5.number().nullable().optional(),
+      portId: z5.number().nullable().optional(),
+      notes: z5.string().nullable().optional()
+    })).mutation(async ({ input }) => {
+      const id = await upsertDgoPortLink(input);
+      return { id };
+    }),
+    deleteDgoPortLink: adminProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ input }) => {
+      await deleteDgoPortLink(input.id);
+      return { ok: true };
+    }),
+    portsByEquipmentForDgo: protectedProcedure.input(z5.object({ equipmentId: z5.number() })).query(({ input }) => getPortsByEquipmentForDgo(input.equipmentId))
   }),
   // ─── SGP Config ───────────────────────────────────────────────────────────────
   sgp: router({
@@ -12818,6 +13850,14 @@ ${fiberFolder}
     removePoi: adminProcedure.input(z5.object({ poiId: z5.number(), groupId: z5.number() })).mutation(async ({ input }) => {
       await removePoiFromGroup(input.poiId, input.groupId);
       return { ok: true };
+    }),
+    addDgo: adminProcedure.input(z5.object({ dgoId: z5.number(), groupId: z5.number() })).mutation(async ({ input }) => {
+      await addDgoToGroup(input.dgoId, input.groupId);
+      return { ok: true };
+    }),
+    removeDgo: adminProcedure.input(z5.object({ dgoId: z5.number(), groupId: z5.number() })).mutation(async ({ input }) => {
+      await removeDgoFromGroup(input.dgoId, input.groupId);
+      return { ok: true };
     })
   }),
   fusionReport: router({
@@ -12969,6 +14009,7 @@ ${fiberFolder}
 // server/_core/context.ts
 init_env();
 init_db();
+init_tenantContext();
 import { jwtVerify as jwtVerify2 } from "jose";
 async function authenticateBearer(authHeader) {
   try {
@@ -12983,13 +14024,23 @@ async function authenticateBearer(authHeader) {
   }
 }
 async function createContext(opts) {
+  const req = opts.req;
+  const tenantDb = req.tenantDb;
   let user = null;
   try {
     const authHeader = opts.req.headers.authorization;
     if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-      user = await authenticateBearer(authHeader);
+      if (tenantDb) {
+        user = await runWithTenantDb(tenantDb, () => authenticateBearer(authHeader));
+      } else {
+        user = await authenticateBearer(authHeader);
+      }
     } else {
-      user = await sdk.authenticateRequest(opts.req);
+      if (tenantDb) {
+        user = await runWithTenantDb(tenantDb, () => sdk.authenticateRequest(opts.req));
+      } else {
+        user = await sdk.authenticateRequest(opts.req);
+      }
     }
   } catch (error) {
     user = null;
@@ -12997,12 +14048,567 @@ async function createContext(opts) {
   return {
     req: opts.req,
     res: opts.res,
-    user
+    user,
+    tenantSlug: req.tenantSlug,
+    tenantDbName: req.tenantDbName,
+    tenantDb
   };
 }
 
 // server/_core/index.ts
 init_serve_static();
+
+// server/_core/masterDb.ts
+import mysql3 from "mysql2";
+import { drizzle as drizzle3 } from "drizzle-orm/mysql2";
+import { mysqlTable as mysqlTable2, int as int2, varchar as varchar2, boolean as boolean2, timestamp as timestamp2, text as text2 } from "drizzle-orm/mysql-core";
+import { eq as eq10 } from "drizzle-orm";
+
+// server/_core/tenantPool.ts
+import mysql2 from "mysql2";
+import { drizzle as drizzle2 } from "drizzle-orm/mysql2";
+var tenantPools = /* @__PURE__ */ new Map();
+var tenantDbs = /* @__PURE__ */ new Map();
+function parseDatabaseUrl(url) {
+  const clean = url.replace(/^mysql:\/\//, "").replace(/\?.*$/, "");
+  const [userPass, hostPortDb] = clean.split("@");
+  const [user, pass] = userPass.split(":");
+  const [hostPort, dbName] = hostPortDb.split("/");
+  const [host, portStr] = hostPort.split(":");
+  const port = parseInt(portStr ?? "3306", 10);
+  return { user, pass, host, port, dbName };
+}
+function getTenantDb(dbName) {
+  if (tenantDbs.has(dbName)) {
+    return tenantDbs.get(dbName);
+  }
+  const baseUrl = process.env.DATABASE_URL ?? "";
+  if (!baseUrl) throw new Error("DATABASE_URL n\xE3o configurada");
+  const { user, pass, host, port } = parseDatabaseUrl(baseUrl);
+  const pool = mysql2.createPool({
+    host,
+    port,
+    user,
+    password: pass,
+    database: dbName,
+    waitForConnections: true,
+    connectionLimit: 5,
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 3e4,
+    connectTimeout: 1e4
+  });
+  pool.on("connection", (conn) => {
+    conn.on("error", (err) => {
+      if (err.code === "ECONNRESET" || err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "ENOTFOUND") {
+        console.warn(`[TenantPool] Conex\xE3o perdida para ${dbName}:`, err.code);
+        tenantPools.delete(dbName);
+        tenantDbs.delete(dbName);
+      }
+    });
+  });
+  const db = drizzle2(pool.promise());
+  tenantPools.set(dbName, pool);
+  tenantDbs.set(dbName, db);
+  return db;
+}
+function removeTenantPool(dbName) {
+  const pool = tenantPools.get(dbName);
+  if (pool) {
+    pool.end(() => {
+    });
+    tenantPools.delete(dbName);
+    tenantDbs.delete(dbName);
+  }
+}
+
+// server/_core/masterDb.ts
+var tenants = mysqlTable2("tenants", {
+  id: int2("id").primaryKey().autoincrement(),
+  slug: varchar2("slug", { length: 64 }).notNull().unique(),
+  name: varchar2("name", { length: 128 }).notNull(),
+  dbName: varchar2("dbName", { length: 128 }).notNull(),
+  logoUrl: text2("logoUrl"),
+  active: boolean2("active").notNull().default(true),
+  createdAt: timestamp2("createdAt").defaultNow()
+});
+var _masterPool = null;
+var _masterDb = null;
+function getMasterDb() {
+  if (_masterDb) return _masterDb;
+  const baseUrl = process.env.DATABASE_URL ?? "";
+  if (!baseUrl) throw new Error("DATABASE_URL n\xE3o configurada");
+  const { user, pass, host, port, dbName } = parseDatabaseUrl(baseUrl);
+  _masterPool = mysql3.createPool({
+    host,
+    port,
+    user,
+    password: pass,
+    database: dbName,
+    waitForConnections: true,
+    connectionLimit: 5,
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 3e4,
+    connectTimeout: 1e4
+  });
+  _masterPool.on("connection", (conn) => {
+    conn.on("error", (err) => {
+      if (err.code === "ECONNRESET" || err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "ENOTFOUND") {
+        console.warn("[MasterDB] Conex\xE3o perdida:", err.code);
+        _masterDb = null;
+        _masterPool = null;
+      }
+    });
+  });
+  _masterDb = drizzle3(_masterPool.promise());
+  return _masterDb;
+}
+async function getTenantBySlug(slug) {
+  try {
+    const db = getMasterDb();
+    const rows = await db.select().from(tenants).where(eq10(tenants.slug, slug));
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+async function getAllTenants() {
+  try {
+    const db = getMasterDb();
+    return await db.select().from(tenants);
+  } catch {
+    return [];
+  }
+}
+async function createTenant(data) {
+  const db = getMasterDb();
+  const result = await db.insert(tenants).values(data);
+  return result[0].insertId;
+}
+async function updateTenant(id, data) {
+  const db = getMasterDb();
+  await db.update(tenants).set(data).where(eq10(tenants.id, id));
+}
+async function deleteTenant(id) {
+  const db = getMasterDb();
+  await db.delete(tenants).where(eq10(tenants.id, id));
+}
+async function initMasterDb() {
+  try {
+    const baseUrl = process.env.DATABASE_URL ?? "";
+    if (!baseUrl) return;
+    const { user, pass, host, port, dbName } = parseDatabaseUrl(baseUrl);
+    const pool = mysql3.createPool({
+      host,
+      port,
+      user,
+      password: pass,
+      database: dbName,
+      waitForConnections: true,
+      connectionLimit: 2
+    });
+    await new Promise((resolve, reject) => {
+      pool.query(`
+        CREATE TABLE IF NOT EXISTS tenants (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          slug VARCHAR(64) NOT NULL UNIQUE,
+          name VARCHAR(128) NOT NULL,
+          dbName VARCHAR(128) NOT NULL,
+          logoUrl TEXT,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `, (err) => {
+        pool.end();
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    console.log("[MasterDB] Tabela tenants inicializada.");
+  } catch (err) {
+    console.warn("[MasterDB] Falha ao inicializar tabela tenants:", err);
+  }
+}
+
+// server/_core/tenantMiddleware.ts
+var RESERVED_SLUGS = /* @__PURE__ */ new Set([
+  "api",
+  "admin",
+  "static",
+  "public",
+  "assets",
+  "favicon.ico",
+  "robots.txt",
+  "sitemap.xml",
+  "health",
+  "status"
+]);
+var slugCache = /* @__PURE__ */ new Map();
+var CACHE_TTL_MS = 6e4;
+async function resolveTenantSlug(slug) {
+  const cached = slugCache.get(slug);
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return cached.active ? { dbName: cached.dbName } : null;
+  }
+  const tenant = await getTenantBySlug(slug);
+  if (tenant) {
+    slugCache.set(slug, { dbName: tenant.dbName, active: tenant.active, ts: Date.now() });
+    return tenant.active ? { dbName: tenant.dbName } : null;
+  }
+  return null;
+}
+function invalidateTenantCache(slug) {
+  slugCache.delete(slug);
+}
+async function tenantMiddleware(req, res, next) {
+  const parts = req.path.split("/").filter(Boolean);
+  const firstSegment = parts[0];
+  if (!firstSegment || RESERVED_SLUGS.has(firstSegment)) {
+    return next();
+  }
+  if (!/^[a-zA-Z0-9-_]+$/.test(firstSegment)) {
+    return next();
+  }
+  try {
+    const tenant = await resolveTenantSlug(firstSegment);
+    if (tenant) {
+      req.tenantSlug = firstSegment;
+      req.tenantDbName = tenant.dbName;
+      req.tenantDb = getTenantDb(tenant.dbName);
+      const slugPrefix = `/${firstSegment}`;
+      req.url = req.url.replace(slugPrefix, "") || "/";
+      if (!req.url.startsWith("/")) req.url = "/" + req.url;
+      if (req.originalUrl.startsWith(slugPrefix)) {
+        req.originalUrl = req.originalUrl.replace(slugPrefix, "") || "/";
+        if (!req.originalUrl.startsWith("/")) req.originalUrl = "/" + req.originalUrl;
+      }
+    }
+  } catch (err) {
+    console.warn("[TenantMiddleware] Erro ao resolver tenant:", err);
+  }
+  next();
+}
+
+// server/_core/tenantProvisioner.ts
+import mysql4 from "mysql2/promise";
+import fs4 from "fs";
+import path4 from "path";
+function buildPermissionHelp(user, host, dbName) {
+  return `O usu\xE1rio MySQL '${user}' n\xE3o tem permiss\xE3o para criar bancos de dados. Execute o seguinte comando no MySQL como root para corrigir:
+
+GRANT ALL PRIVILEGES ON \`fiberdoc_%\`.* TO '${user}'@'${host}';
+FLUSH PRIVILEGES;
+
+Ou para conceder permiss\xE3o apenas para este banco espec\xEDfico:
+
+GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${user}'@'${host}';
+FLUSH PRIVILEGES;`;
+}
+function isPermissionError(err) {
+  return err?.code === "ER_DBACCESS_DENIED_ERROR" || err?.code === "ER_ACCESS_DENIED_ERROR" || typeof err?.message === "string" && err.message.toLowerCase().includes("access denied");
+}
+async function provisionTenantDatabase(dbName) {
+  const baseUrl = process.env.DATABASE_URL ?? "";
+  if (!baseUrl) return { success: false, error: "DATABASE_URL n\xE3o configurada" };
+  const { user, pass, host, port } = parseDatabaseUrl(baseUrl);
+  if (!/^[a-zA-Z0-9_]+$/.test(dbName)) {
+    return { success: false, error: "Nome do banco inv\xE1lido. Use apenas letras, n\xFAmeros e underscores." };
+  }
+  let conn = null;
+  try {
+    conn = await mysql4.createConnection({
+      host,
+      port,
+      user,
+      password: pass,
+      multipleStatements: true
+    });
+    try {
+      await conn.execute(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+      console.log(`[Provisioner] Banco ${dbName} criado.`);
+    } catch (createErr) {
+      if (isPermissionError(createErr)) {
+        const help = buildPermissionHelp(user, host, dbName);
+        console.error(`[Provisioner] Permiss\xE3o negada ao criar banco ${dbName}:`, createErr.message);
+        return {
+          success: false,
+          permissionError: true,
+          error: `Permiss\xE3o negada: o usu\xE1rio MySQL '${user}' n\xE3o pode criar bancos de dados.`,
+          permissionHelp: help
+        };
+      }
+      throw createErr;
+    }
+    await conn.execute(`USE \`${dbName}\``);
+    const migrationsDir = process.env.MIGRATIONS_DIR ?? path4.join(process.cwd(), "dist");
+    const migrationFiles = [
+      // Schema base (todas as tabelas Drizzle consolidadas)
+      "schema-base.sql",
+      // Migrações incrementais
+      "migrate-v7.sql",
+      "migrate-v8.sql",
+      "migrate-v9.sql",
+      "migrate-v10.sql",
+      "migrate-v11.sql",
+      "migrate-v11b.sql",
+      "migrate-v12.sql",
+      "migrate-v13.sql",
+      "migrate-v14.sql",
+      "migrate-v15.sql",
+      "migrate-v16.sql",
+      "migrate-v17.sql",
+      "migrate-v18.sql",
+      "migrate-v19.sql"
+    ];
+    for (const file of migrationFiles) {
+      const candidates = [
+        path4.join(migrationsDir, file),
+        path4.join(process.cwd(), file),
+        path4.join("/opt/fiberdoc", file),
+        path4.join("/opt/fiberdoc/dist", file)
+      ];
+      const sqlFile = candidates.find((f) => fs4.existsSync(f));
+      if (!sqlFile) {
+        console.log(`[Provisioner] ${file} n\xE3o encontrado \u2014 ignorado.`);
+        continue;
+      }
+      try {
+        const sql5 = fs4.readFileSync(sqlFile, "utf-8");
+        const statements = sql5.split(";").map((s) => s.trim()).filter((s) => s.length > 0 && !s.startsWith("--"));
+        for (const stmt of statements) {
+          try {
+            await conn.execute(stmt);
+          } catch (stmtErr) {
+            if (stmtErr.code !== "ER_TABLE_EXISTS_ERROR" && stmtErr.code !== "ER_DUP_FIELDNAME" && stmtErr.code !== "ER_DUP_KEYNAME") {
+              console.warn(`[Provisioner] Aviso em ${file}:`, stmtErr.message);
+            }
+          }
+        }
+        console.log(`[Provisioner] ${file} aplicado em ${dbName}.`);
+      } catch (fileErr) {
+        console.warn(`[Provisioner] Erro ao aplicar ${file}:`, fileErr);
+      }
+    }
+    const defaultCredentials = await seedTenantAdmin(conn);
+    return { success: true, defaultCredentials };
+  } catch (err) {
+    console.error(`[Provisioner] Erro ao provisionar ${dbName}:`, err);
+    if (isPermissionError(err)) {
+      const help = buildPermissionHelp(user, host, dbName);
+      return {
+        success: false,
+        permissionError: true,
+        error: `Permiss\xE3o negada: o usu\xE1rio MySQL '${user}' n\xE3o pode criar bancos de dados.`,
+        permissionHelp: help
+      };
+    }
+    return { success: false, error: err.message ?? String(err) };
+  } finally {
+    if (conn) await conn.end();
+  }
+}
+async function seedTenantAdmin(conn) {
+  const DEFAULT_EMAIL = "admin@fiberdoc.local";
+  const DEFAULT_PASSWORD = "fiberdoc2025";
+  const DEFAULT_NAME = "Administrador";
+  const openId = `local:${DEFAULT_EMAIL}`;
+  try {
+    const { hash: hash2 } = await import("bcryptjs");
+    const passwordHash = await hash2(DEFAULT_PASSWORD, 12);
+    const now = (/* @__PURE__ */ new Date()).toISOString().slice(0, 19).replace("T", " ");
+    const [existing] = await conn.execute(
+      `SELECT id FROM users WHERE login_method = 'local' LIMIT 1`
+    );
+    if (existing.length > 0) {
+      console.log("[Provisioner] Usu\xE1rio admin j\xE1 existe no banco do tenant.");
+      return null;
+    }
+    await conn.execute(
+      `INSERT INTO users (openId, name, email, role, loginMethod, passwordHash, mustChangePassword, lastSignedIn)
+       VALUES (?, ?, ?, 'admin', 'local', ?, 1, ?)`,
+      [openId, DEFAULT_NAME, DEFAULT_EMAIL, passwordHash, now]
+    );
+    console.log(`[Provisioner] \u2705 Usu\xE1rio admin padr\xE3o criado no banco do tenant.`);
+    return { email: DEFAULT_EMAIL, password: DEFAULT_PASSWORD };
+  } catch (err) {
+    console.warn("[Provisioner] N\xE3o foi poss\xEDvel criar usu\xE1rio admin:", err.message);
+    return null;
+  }
+}
+async function databaseExists(dbName) {
+  const baseUrl = process.env.DATABASE_URL ?? "";
+  if (!baseUrl) return false;
+  const { user, pass, host, port } = parseDatabaseUrl(baseUrl);
+  let conn = null;
+  try {
+    conn = await mysql4.createConnection({ host, port, user, password: pass });
+    const [rows] = await conn.execute(
+      `SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?`,
+      [dbName]
+    );
+    return rows.length > 0;
+  } catch {
+    return false;
+  } finally {
+    if (conn) await conn.end();
+  }
+}
+
+// server/_core/adminTenantRouter.ts
+function registerAdminTenantRoutes(app) {
+  const requireAdmin = async (req, res, next) => {
+    try {
+      const user = await sdk.authenticateRequest(req);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Acesso negado. Requer role=admin." });
+      }
+      req.adminUser = user;
+      next();
+    } catch {
+      res.status(401).json({ error: "N\xE3o autenticado" });
+    }
+  };
+  app.get("/api/admin/tenants", requireAdmin, async (_req, res) => {
+    try {
+      const list = await getAllTenants();
+      res.json({ tenants: list });
+    } catch (err) {
+      res.status(500).json({ error: err.message ?? "Erro interno" });
+    }
+  });
+  app.post("/api/admin/tenants", requireAdmin, async (req, res) => {
+    try {
+      const { slug, name, logoUrl } = req.body ?? {};
+      if (!slug || !name) {
+        return res.status(400).json({ error: "slug e name s\xE3o obrigat\xF3rios" });
+      }
+      if (!/^[a-z0-9-_]+$/.test(slug)) {
+        return res.status(400).json({
+          error: "Slug inv\xE1lido. Use apenas letras min\xFAsculas, n\xFAmeros, h\xEDfens e underscores."
+        });
+      }
+      const existing = await getTenantBySlug(slug);
+      if (existing) {
+        return res.status(409).json({ error: `Slug '${slug}' j\xE1 est\xE1 em uso.` });
+      }
+      const dbName = `fiberdoc_${slug.replace(/-/g, "_")}`;
+      const dbExists = await databaseExists(dbName);
+      const id = await createTenant({ slug, name, dbName, logoUrl: logoUrl ?? null, active: true });
+      const provision = await provisionTenantDatabase(dbName);
+      if (!provision.success) {
+        await deleteTenant(id);
+        if (provision.permissionError) {
+          return res.status(500).json({
+            error: provision.error,
+            permissionError: true,
+            permissionHelp: provision.permissionHelp,
+            fix: {
+              description: "Execute o comando abaixo no MySQL como root para conceder permiss\xF5es ao usu\xE1rio:",
+              sql: `GRANT ALL PRIVILEGES ON \`fiberdoc_%\`.* TO '${provision.permissionHelp?.match(/TO '([^']+)'/)?.[1] ?? "fiberdoc"}'@'${provision.permissionHelp?.match(/@'([^']+)'/)?.[1] ?? "localhost"}';
+FLUSH PRIVILEGES;`
+            }
+          });
+        }
+        return res.status(500).json({
+          error: `Falha ao provisionar banco de dados: ${provision.error}`
+        });
+      }
+      res.status(201).json({
+        ok: true,
+        id,
+        slug,
+        name,
+        dbName,
+        dbAlreadyExisted: dbExists,
+        message: `Provedor '${name}' criado com sucesso. Acesse em: /${slug}`,
+        defaultCredentials: provision.defaultCredentials ?? null
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message ?? "Erro interno" });
+    }
+  });
+  app.patch("/api/admin/tenants/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (!Number.isFinite(id)) {
+        return res.status(400).json({ error: "ID inv\xE1lido" });
+      }
+      const { name, logoUrl, active } = req.body ?? {};
+      const updates = {};
+      if (name !== void 0) updates.name = name;
+      if (logoUrl !== void 0) updates.logoUrl = logoUrl;
+      if (active !== void 0) updates.active = active;
+      await updateTenant(id, updates);
+      const tenants2 = await getAllTenants();
+      const tenant = tenants2.find((t2) => t2.id === id);
+      if (tenant) {
+        invalidateTenantCache(tenant.slug);
+        if (!active) {
+          removeTenantPool(tenant.dbName);
+        }
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message ?? "Erro interno" });
+    }
+  });
+  app.delete("/api/admin/tenants/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (!Number.isFinite(id)) {
+        return res.status(400).json({ error: "ID inv\xE1lido" });
+      }
+      const tenants2 = await getAllTenants();
+      const tenant = tenants2.find((t2) => t2.id === id);
+      if (!tenant) {
+        return res.status(404).json({ error: "Provedor n\xE3o encontrado" });
+      }
+      invalidateTenantCache(tenant.slug);
+      removeTenantPool(tenant.dbName);
+      await deleteTenant(id);
+      res.json({
+        ok: true,
+        message: `Provedor '${tenant.name}' removido. O banco '${tenant.dbName}' foi preservado.`
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message ?? "Erro interno" });
+    }
+  });
+  app.post("/api/admin/tenants/:id/reprovision", requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const tenants2 = await getAllTenants();
+      const tenant = tenants2.find((t2) => t2.id === id);
+      if (!tenant) {
+        return res.status(404).json({ error: "Provedor n\xE3o encontrado" });
+      }
+      const result = await provisionTenantDatabase(tenant.dbName);
+      if (!result.success) {
+        if (result.permissionError) {
+          return res.status(500).json({
+            error: result.error,
+            permissionError: true,
+            permissionHelp: result.permissionHelp
+          });
+        }
+        return res.status(500).json({ error: result.error });
+      }
+      res.json({ ok: true, message: `Migra\xE7\xF5es reaplicadas em '${tenant.dbName}'.` });
+    } catch (err) {
+      res.status(500).json({ error: err.message ?? "Erro interno" });
+    }
+  });
+  app.get("/api/admin/tenants/check-slug/:slug", requireAdmin, async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const existing = await getTenantBySlug(slug);
+      res.json({ available: !existing, slug });
+    } catch (err) {
+      res.status(500).json({ error: err.message ?? "Erro interno" });
+    }
+  });
+}
 
 // server/ipReportPdf.ts
 import PDFDocument from "pdfkit";
@@ -13227,7 +14833,7 @@ async function generateIpReportPdf(res) {
 init_db();
 init_schema();
 import PDFDocument2 from "pdfkit";
-import { eq as eq10, asc } from "drizzle-orm";
+import { eq as eq11, asc } from "drizzle-orm";
 var EQUIPMENT_TYPE_LABELS = {
   switch: "Switch",
   olt: "OLT",
@@ -13259,7 +14865,7 @@ async function generateEquipmentReportPdf() {
     serviceDescription: equipments.serviceDescription,
     roomId: equipments.roomId,
     roomName: rooms.name
-  }).from(equipments).leftJoin(rooms, eq10(equipments.roomId, rooms.id)).orderBy(asc(rooms.name), asc(equipments.name));
+  }).from(equipments).leftJoin(rooms, eq11(equipments.roomId, rooms.id)).orderBy(asc(rooms.name), asc(equipments.name));
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument2({
       size: "A4",
@@ -13482,10 +15088,10 @@ import multer from "multer";
 // server/systemUpdate.ts
 init_db();
 init_schema();
-import fs4 from "fs";
-import path4 from "path";
+import fs5 from "fs";
+import path5 from "path";
 import { execSync } from "child_process";
-import { eq as eq11 } from "drizzle-orm";
+import { eq as eq12 } from "drizzle-orm";
 var updateStatus = {
   running: false,
   progress: 0,
@@ -13502,8 +15108,8 @@ function setStatus(progress, step, logLine) {
 }
 async function getCurrentVersion() {
   try {
-    const pkgPath = path4.join(process.cwd(), "package.json");
-    const pkg = JSON.parse(fs4.readFileSync(pkgPath, "utf-8"));
+    const pkgPath = path5.join(process.cwd(), "package.json");
+    const pkg = JSON.parse(fs5.readFileSync(pkgPath, "utf-8"));
     return {
       version: pkg.version ?? "3.0.0",
       buildDate: pkg.buildDate ?? (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
@@ -13517,7 +15123,7 @@ async function getUpdateHistory() {
   try {
     const db = await getDb();
     if (!db) return [];
-    const row = await db.select({ value: systemSettings.value }).from(systemSettings).where(eq11(systemSettings.key, "update_history")).limit(1);
+    const row = await db.select({ value: systemSettings.value }).from(systemSettings).where(eq12(systemSettings.key, "update_history")).limit(1);
     if (row[0]?.value) return JSON.parse(row[0].value);
   } catch {
   }
@@ -13530,9 +15136,9 @@ async function saveUpdateHistory(entry) {
     const history = await getUpdateHistory();
     history.unshift(entry);
     const trimmed = history.slice(0, 20);
-    const existing = await db.select({ id: systemSettings.id }).from(systemSettings).where(eq11(systemSettings.key, "update_history")).limit(1);
+    const existing = await db.select({ id: systemSettings.id }).from(systemSettings).where(eq12(systemSettings.key, "update_history")).limit(1);
     if (existing[0]) {
-      await db.update(systemSettings).set({ value: JSON.stringify(trimmed) }).where(eq11(systemSettings.key, "update_history"));
+      await db.update(systemSettings).set({ value: JSON.stringify(trimmed) }).where(eq12(systemSettings.key, "update_history"));
     } else {
       await db.insert(systemSettings).values({ key: "update_history", value: JSON.stringify(trimmed) });
     }
@@ -13567,37 +15173,37 @@ async function applyUpdate(zipPath, originalName) {
   setStatus(5, "validating", `Iniciando atualiza\xE7\xE3o: ${originalName}`);
   const isProduction = process.env.NODE_ENV === "production";
   const appDir = process.cwd();
-  const tmpDir = path4.join("/tmp", `fiberdoc-update-${Date.now()}`);
-  const backupDir = path4.join("/tmp", `fiberdoc-backup-${Date.now()}`);
+  const tmpDir = path5.join("/tmp", `fiberdoc-update-${Date.now()}`);
+  const backupDir = path5.join("/tmp", `fiberdoc-backup-${Date.now()}`);
   try {
     setStatus(10, "validating", "Validando pacote ZIP...");
     const validation = validateUpdatePackage(zipPath);
     if (!validation.valid) throw new Error(validation.error);
     setStatus(15, "validating", `Pacote v\xE1lido. Vers\xE3o detectada: ${validation.version}`);
     setStatus(20, "backup", "Criando backup dos arquivos atuais...");
-    fs4.mkdirSync(backupDir, { recursive: true });
+    fs5.mkdirSync(backupDir, { recursive: true });
     const criticalFiles = ["server", "client/src", "drizzle", "package.json", "tsconfig.json"];
     for (const f of criticalFiles) {
-      const src = path4.join(appDir, f);
-      if (fs4.existsSync(src)) {
+      const src = path5.join(appDir, f);
+      if (fs5.existsSync(src)) {
         execSync(`cp -r "${src}" "${backupDir}/" 2>/dev/null || true`);
       }
     }
     setStatus(30, "backup", "Backup criado com sucesso");
     setStatus(35, "extracting", "Extraindo pacote de atualiza\xE7\xE3o...");
-    fs4.mkdirSync(tmpDir, { recursive: true });
+    fs5.mkdirSync(tmpDir, { recursive: true });
     execSync(`unzip -q "${zipPath}" -d "${tmpDir}"`, { timeout: 6e4 });
-    const entries = fs4.readdirSync(tmpDir);
-    const extractDir = entries.length === 1 && fs4.statSync(path4.join(tmpDir, entries[0])).isDirectory() ? path4.join(tmpDir, entries[0]) : tmpDir;
+    const entries = fs5.readdirSync(tmpDir);
+    const extractDir = entries.length === 1 && fs5.statSync(path5.join(tmpDir, entries[0])).isDirectory() ? path5.join(tmpDir, entries[0]) : tmpDir;
     setStatus(45, "extracting", `Extra\xEDdo em: ${extractDir}`);
     setStatus(50, "copying", "Aplicando arquivos atualizados...");
     const excludes = ["node_modules", ".env", "fiberdoc.env", "storage", ".manus-logs"];
-    const updateFiles = fs4.readdirSync(extractDir);
+    const updateFiles = fs5.readdirSync(extractDir);
     let copied = 0;
     for (const file of updateFiles) {
       if (excludes.includes(file)) continue;
-      const src = path4.join(extractDir, file);
-      const dst = path4.join(appDir, file);
+      const src = path5.join(extractDir, file);
+      const dst = path5.join(appDir, file);
       execSync(`cp -r "${src}" "${dst}" 2>/dev/null || true`);
       copied++;
     }
@@ -13623,14 +15229,14 @@ async function applyUpdate(zipPath, originalName) {
       description: originalName
     });
     try {
-      const newPkgPath = path4.join(extractDir, "package.json");
-      if (fs4.existsSync(newPkgPath)) {
-        const newPkg = JSON.parse(fs4.readFileSync(newPkgPath, "utf-8"));
-        const curPkgPath = path4.join(appDir, "package.json");
-        const curPkg = JSON.parse(fs4.readFileSync(curPkgPath, "utf-8"));
+      const newPkgPath = path5.join(extractDir, "package.json");
+      if (fs5.existsSync(newPkgPath)) {
+        const newPkg = JSON.parse(fs5.readFileSync(newPkgPath, "utf-8"));
+        const curPkgPath = path5.join(appDir, "package.json");
+        const curPkg = JSON.parse(fs5.readFileSync(curPkgPath, "utf-8"));
         curPkg.version = newPkg.version ?? curPkg.version;
         curPkg.buildDate = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-        fs4.writeFileSync(curPkgPath, JSON.stringify(curPkg, null, 2));
+        fs5.writeFileSync(curPkgPath, JSON.stringify(curPkg, null, 2));
       }
     } catch {
     }
@@ -13649,7 +15255,7 @@ async function applyUpdate(zipPath, originalName) {
     updateStatus.running = false;
     updateStatus.error = err.message;
     setStatus(updateStatus.progress, "error", `ERRO: ${err.message}`);
-    if (isProduction && fs4.existsSync(backupDir)) {
+    if (isProduction && fs5.existsSync(backupDir)) {
       try {
         setStatus(updateStatus.progress, "rollback", "Restaurando backup ap\xF3s erro...");
         execSync(`cp -r "${backupDir}/." "${appDir}/" 2>/dev/null || true`);
@@ -13660,16 +15266,16 @@ async function applyUpdate(zipPath, originalName) {
     throw err;
   } finally {
     try {
-      fs4.rmSync(tmpDir, { recursive: true, force: true });
+      fs5.rmSync(tmpDir, { recursive: true, force: true });
     } catch {
     }
     try {
-      fs4.rmSync(zipPath, { force: true });
+      fs5.rmSync(zipPath, { force: true });
     } catch {
     }
     if (!isProduction) {
       try {
-        fs4.rmSync(backupDir, { recursive: true, force: true });
+        fs5.rmSync(backupDir, { recursive: true, force: true });
       } catch {
       }
     }
@@ -13679,7 +15285,7 @@ async function applyUpdate(zipPath, originalName) {
 // server/_core/index.ts
 init_db();
 init_db();
-var LOCAL_UPLOADS_DIR2 = process.env.BACKUP_LOCAL_DIR ? path5.join(path5.dirname(process.env.BACKUP_LOCAL_DIR), "uploads") : "/opt/fiberdoc/uploads";
+var LOCAL_UPLOADS_DIR2 = process.env.BACKUP_LOCAL_DIR ? path6.join(path6.dirname(process.env.BACKUP_LOCAL_DIR), "uploads") : "/opt/fiberdoc/uploads";
 function isPortAvailable(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -13702,6 +15308,8 @@ async function startServer() {
   const server = createServer(app);
   app.use(express2.json({ limit: "50mb" }));
   app.use(express2.urlencoded({ limit: "50mb", extended: true }));
+  app.use(tenantMiddleware);
+  registerAdminTenantRoutes(app);
   registerOAuthRoutes(app);
   registerLocalAuthRoutes(app);
   app.post("/api/webhooks/sgp", async (req, res) => {
@@ -13831,7 +15439,7 @@ async function startServer() {
       let dns = "";
       let activeIface = interfaces.find((i) => i.type === "physical")?.name ?? "ens18";
       try {
-        const ifContent = fs5.readFileSync("/etc/network/interfaces", "utf8");
+        const ifContent = fs6.readFileSync("/etc/network/interfaces", "utf8");
         const gwMatch = ifContent.match(/gateway\s+([\d.]+)/);
         const dnsMatch = ifContent.match(/dns-nameservers\s+(.+)/);
         if (gwMatch) gateway = gwMatch[1].trim();
@@ -13878,7 +15486,7 @@ async function startServer() {
       const ifacePath = "/etc/network/interfaces";
       const backupPath = `/etc/network/interfaces.bak.${Date.now()}`;
       try {
-        fs5.copyFileSync(ifacePath, backupPath);
+        fs6.copyFileSync(ifacePath, backupPath);
       } catch {
       }
       const dnsLine = dns ? `
@@ -13895,7 +15503,7 @@ iface ${iface} inet static
         address ${ip}/${prefix}
         gateway ${gateway}${dnsLine}
 `;
-      fs5.writeFileSync(ifacePath, newContent, "utf8");
+      fs6.writeFileSync(ifacePath, newContent, "utf8");
       try {
         const currentIpOut = execSync2(`ip addr show ${iface}`, { encoding: "utf8" });
         const currentIpMatch = currentIpOut.match(/inet ([\d.]+\/(\d+))/);
@@ -13927,15 +15535,15 @@ iface ${iface} inet static
       if (!filename || filename.includes("..") || filename.includes("/")) {
         return res.status(400).json({ error: "Nome de arquivo inv\xE1lido" });
       }
-      const filePath = path5.join(LOCAL_UPLOADS_DIR2, filename);
-      if (!fs5.existsSync(filePath)) {
+      const filePath = path6.join(LOCAL_UPLOADS_DIR2, filename);
+      if (!fs6.existsSync(filePath)) {
         return res.status(404).json({ error: "Arquivo n\xE3o encontrado" });
       }
-      const ext = path5.extname(filename).toLowerCase();
+      const ext = path6.extname(filename).toLowerCase();
       const mimeTypes = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml" };
       res.setHeader("Content-Type", mimeTypes[ext] ?? "application/octet-stream");
       res.setHeader("Cache-Control", "public, max-age=86400");
-      fs5.createReadStream(filePath).pipe(res);
+      fs6.createReadStream(filePath).pipe(res);
     } catch (err) {
       console.error("[uploads] erro:", err);
       if (!res.headersSent) res.status(500).json({ error: "Erro ao servir arquivo" });
@@ -13947,13 +15555,13 @@ iface ${iface} inet static
       if (!filename || filename.includes("..") || filename.includes("/") || !filename.endsWith(".json")) {
         return res.status(400).json({ error: "Nome de arquivo inv\xE1lido" });
       }
-      const filePath = path5.join(LOCAL_BACKUP_DIR, filename);
-      if (!fs5.existsSync(filePath)) {
+      const filePath = path6.join(LOCAL_BACKUP_DIR, filename);
+      if (!fs6.existsSync(filePath)) {
         return res.status(404).json({ error: "Arquivo n\xE3o encontrado" });
       }
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      fs5.createReadStream(filePath).pipe(res);
+      fs6.createReadStream(filePath).pipe(res);
     } catch (err) {
       console.error("[backup-download] erro:", err);
       if (!res.headersSent) res.status(500).json({ error: "Erro ao baixar backup" });
@@ -14021,15 +15629,15 @@ iface ${iface} inet static
       const rows = allRoutes.map((r) => {
         const fromEl = allElements.find((e) => e.id === r.fromElementId);
         const toEl = allElements.find((e) => e.id === r.toElementId);
-        let path6 = [];
+        let path7 = [];
         try {
-          if (r.path) path6 = JSON.parse(r.path);
+          if (r.path) path7 = JSON.parse(r.path);
         } catch {
         }
         let lenM = 0;
-        if (path6.length >= 2) {
+        if (path7.length >= 2) {
           let d = 0;
-          for (let i = 1; i < path6.length; i++) d += haversine(path6[i - 1], path6[i]);
+          for (let i = 1; i < path7.length; i++) d += haversine(path7[i - 1], path7[i]);
           lenM = Math.round(d * 1e3);
         }
         const routeGroupIds = allRouteGroups.filter((rg) => rg.routeId === r.id).map((rg) => Number(rg.groupId));
@@ -14739,6 +16347,63 @@ ${folders}
     const ok = respondToConfirm2(sessionId, answer);
     res.json({ ok });
   });
+  app.get("/api/osrm/route", async (req, res) => {
+    const { fromLng, fromLat, toLng, toLat } = req.query;
+    if (!fromLng || !fromLat || !toLng || !toLat) {
+      return res.status(400).json({ error: "Par\xE2metros obrigat\xF3rios: fromLng, fromLat, toLng, toLat" });
+    }
+    const coords = `${fromLng},${fromLat};${toLng},${toLat}`;
+    const servers = [
+      `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true`,
+      `https://routing.openstreetmap.de/routed-car/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true`
+    ];
+    for (const url of servers) {
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(8e3) });
+        if (!response.ok) continue;
+        const data = await response.json();
+        if (data?.code === "Ok" && data.routes?.[0]) {
+          const route = data.routes[0];
+          const allCoords = [];
+          for (const leg of route.legs ?? []) {
+            for (const step of leg.steps ?? []) {
+              const stepCoords = step.geometry?.coordinates ?? [];
+              for (const c of stepCoords) {
+                const last = allCoords[allCoords.length - 1];
+                if (!last || last[0] !== c[0] || last[1] !== c[1]) {
+                  allCoords.push(c);
+                }
+              }
+            }
+          }
+          if (allCoords.length > 2) {
+            route.geometry = { type: "LineString", coordinates: allCoords };
+          }
+          return res.json(data);
+        }
+      } catch (e) {
+        console.warn(`[OSRM proxy] Falha em ${url}: ${e?.message}`);
+      }
+    }
+    return res.status(502).json({ error: "Todos os servidores OSRM indispon\xEDveis" });
+  });
+  app.get("/api/osrm/test", async (_req, res) => {
+    const results = {};
+    const servers = [
+      { name: "router.project-osrm.org", url: "https://router.project-osrm.org/route/v1/driving/-46.633,-23.550;-46.640,-23.560?overview=false" },
+      { name: "routing.openstreetmap.de", url: "https://routing.openstreetmap.de/routed-car/route/v1/driving/-46.633,-23.550;-46.640,-23.560?overview=false" }
+    ];
+    for (const s of servers) {
+      try {
+        const r = await fetch(s.url, { signal: AbortSignal.timeout(6e3) });
+        const d = await r.json();
+        results[s.name] = d?.code === "Ok" ? "OK" : `code=${d?.code}`;
+      } catch (e) {
+        results[s.name] = `ERRO: ${e?.message}`;
+      }
+    }
+    res.json(results);
+  });
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -14757,6 +16422,7 @@ ${folders}
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
+  initMasterDb().catch((err) => console.warn("[MasterDB] Aviso:", err));
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
     startBackupScheduler();
