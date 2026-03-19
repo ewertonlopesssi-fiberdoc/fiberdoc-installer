@@ -144,15 +144,24 @@ fi
 mkdir -p "$FIBERDOC_DIR/dist/public/assets"
 mkdir -p "$FIBERDOC_DIR/backups"
 mkdir -p "$FIBERDOC_DIR/logs"
-success "Diretório $FIBERDOC_DIR criado."
-
-# ─── 6. Copiar arquivos da aplicação ────────────────────────────────────────
+success "Diretório $FIBERDOC_DIR criado."# ─── 6. Copiar arquivos da aplicação ────────────────────────────────────────────
 info "[6/8] Copiando arquivos da aplicação..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cp -r "$SCRIPT_DIR/dist/"* "$FIBERDOC_DIR/dist/"
-success "Arquivos copiados para $FIBERDOC_DIR."
 
-# ─── 7. Criar arquivo .env ──────────────────────────────────────────────────
+# Copiar schema-base.sql para /opt/fiberdoc/scripts/
+mkdir -p "$FIBERDOC_DIR/scripts"
+[ -f "$SCRIPT_DIR/schema-full.sql" ] && cp "$SCRIPT_DIR/schema-full.sql" "$FIBERDOC_DIR/scripts/schema-base.sql"
+
+# Inserir usuário admin padrão com hash bcrypt correto
+info "  Criando usuário admin padrão..."
+ADMIN_HASH='\$2b\$12\$.RRDCP3jRU.v9r1FlpJCpOwiGrBGJjHVQzIPtyt43Ndt7CK7wmxs6'
+$MYSQL_CMD "$DB_NAME" -e "
+  INSERT IGNORE INTO \`users\` (openId, name, email, loginMethod, role, passwordHash, mustChangePassword)
+  VALUES ('local-admin', 'Administrador', 'admin@fiberdoc.local', 'local', 'admin', '${ADMIN_HASH}', 1);
+" 2>/dev/null && success "Usuário admin criado." || warn "Usuário admin pode já existir."
+
+success "Arquivos copiados para $FIBERDOC_DIR."# ─── 7. Criar arquivo .env ──────────────────────────────────────────────────
 info "[7/8] Criando configuração de ambiente..."
 DATABASE_URL="mysql://$DB_USER:$DB_PASS@localhost:3306/$DB_NAME"
 

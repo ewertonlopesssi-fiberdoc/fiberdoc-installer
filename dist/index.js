@@ -2362,6 +2362,16 @@ async function getTubesByCeo(ceoId) {
 async function createCeoTube(data) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
+  const existing = await db.select({ id: ceoTubes.id, bandejaId: ceoTubes.bandejaId }).from(ceoTubes).where(and(eq(ceoTubes.ceoId, data.ceoId), eq(ceoTubes.identifier, data.identifier.trim())));
+  if (existing.length > 0) {
+    const orphan = existing.find((t2) => t2.bandejaId === null);
+    if (orphan) {
+      const newBandejaId = data.bandejaId ?? null;
+      await db.update(ceoTubes).set({ bandejaId: newBandejaId }).where(eq(ceoTubes.id, orphan.id));
+      return orphan.id;
+    }
+    throw new Error(`J\xE1 existe um tubo com o identificador "${data.identifier.trim()}" nesta CEO.`);
+  }
   const colorVal = data.color && data.color.trim() !== "" ? data.color.trim() : "blue";
   const notesVal = data.notes && data.notes.trim() !== "" ? data.notes.trim() : void 0;
   const insertData = {
@@ -3740,7 +3750,7 @@ async function updateCeoBandeja(id, data) {
   if (!db) throw new Error("DB not available");
   await db.update(ceoBandejas).set(data).where(eq(ceoBandejas.id, id));
 }
-async function deleteCeoBandeja(id) {
+async function deleteCeoBandeja(id, deleteTubes = false) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   const splitters = await db.select().from(ceoSplitters).where(eq(ceoSplitters.bandejaId, id));
@@ -3748,7 +3758,16 @@ async function deleteCeoBandeja(id) {
     await db.delete(ceoSplitterVias).where(eq(ceoSplitterVias.splitterId, s.id));
   }
   await db.delete(ceoSplitters).where(eq(ceoSplitters.bandejaId, id));
-  await db.update(ceoTubes).set({ bandejaId: null }).where(eq(ceoTubes.bandejaId, id));
+  if (deleteTubes) {
+    const tubes = await db.select({ id: ceoTubes.id }).from(ceoTubes).where(eq(ceoTubes.bandejaId, id));
+    for (const t2 of tubes) {
+      await db.update(ceoVias).set({ fusedToTubeId: null, fusedToViaId: null }).where(eq(ceoVias.fusedToTubeId, t2.id));
+      await db.delete(ceoVias).where(eq(ceoVias.tubeId, t2.id));
+    }
+    await db.delete(ceoTubes).where(eq(ceoTubes.bandejaId, id));
+  } else {
+    await db.update(ceoTubes).set({ bandejaId: null }).where(eq(ceoTubes.bandejaId, id));
+  }
   await db.delete(ceoBandejas).where(eq(ceoBandejas.id, id));
 }
 function getUnbalancedLoss(ratio) {
@@ -6864,6 +6883,30 @@ var init_genieacsRouter = __esm({
         if (!cfg) throw new Error("SGP n\xE3o configurado");
         return sgpCpeGetDetails2(cfg, input.servicoId);
       }),
+      // Buscar deviceId do GenieACS pelo serial da ONU
+      findDeviceBySerial: protectedProcedure.input(z3.object({
+        serial: z3.string().min(1)
+      })).query(async ({ input }) => {
+        try {
+          const queryById = encodeURIComponent(JSON.stringify({
+            "_id": { "$regex": input.serial, "$options": "i" }
+          }));
+          const byId = await genieRequest(`/devices?query=${queryById}&limit=5`);
+          if (Array.isArray(byId) && byId.length > 0) {
+            return { found: true, deviceId: byId[0]._id, device: normalizeDevice(byId[0]) };
+          }
+          const queryBySerial = encodeURIComponent(JSON.stringify({
+            "_deviceId._SerialNumber": { "$regex": input.serial, "$options": "i" }
+          }));
+          const bySerial = await genieRequest(`/devices?query=${queryBySerial}&limit=5`);
+          if (Array.isArray(bySerial) && bySerial.length > 0) {
+            return { found: true, deviceId: bySerial[0]._id, device: normalizeDevice(bySerial[0]) };
+          }
+          return { found: false, deviceId: null, device: null };
+        } catch (err) {
+          return { found: false, deviceId: null, device: null, error: err.message };
+        }
+      }),
       // Forçar actualização de parâmetros (refresh)
       refreshDevice: protectedProcedure.input(z3.object({ deviceId: z3.string() })).mutation(async ({ input }) => {
         const encoded = encodeURIComponent(input.deviceId);
@@ -7128,11 +7171,11 @@ var init_ssh = __esm({
 
 // server/_core/serve-static.ts
 import express from "express";
-import fs3 from "fs";
+import fs4 from "fs";
 import path3 from "path";
 function serveStatic(app) {
   const distPath = process.env.NODE_ENV === "development" ? path3.resolve(import.meta.dirname, "../..", "dist", "public") : path3.resolve(import.meta.dirname, "public");
-  if (!fs3.existsSync(distPath)) {
+  if (!fs4.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
@@ -7386,7 +7429,7 @@ import express2 from "express";
 import { createServer } from "http";
 import net from "net";
 import path6 from "path";
-import fs6 from "fs";
+import fs7 from "fs";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
 // server/_core/oauth.ts
@@ -7833,7 +7876,7 @@ async function seedDefaultAdmin() {
 init_const();
 import { z as z5 } from "zod";
 import path2 from "path";
-import fs2 from "fs";
+import fs3 from "fs";
 
 // server/_core/systemRouter.ts
 import { z } from "zod";
@@ -7944,6 +7987,255 @@ var systemRouter = router({
   })
 });
 
+// server/sslManager.ts
+import { execSync } from "child_process";
+import fs from "fs";
+var sslStatus = {
+  running: false,
+  progress: 0,
+  step: "idle",
+  log: []
+};
+function getSslStatus() {
+  return { ...sslStatus, log: [...sslStatus.log] };
+}
+function setStatus(progress, step, logLine) {
+  sslStatus.progress = progress;
+  sslStatus.step = step;
+  if (logLine) {
+    const ts = (/* @__PURE__ */ new Date()).toLocaleTimeString("pt-BR");
+    sslStatus.log.push(`[${ts}] ${logLine}`);
+  }
+}
+var NGINX_CONF_PATH = "/etc/nginx/sites-enabled/fiberdoc";
+var NGINX_CONF_AVAILABLE = "/etc/nginx/sites-available/fiberdoc";
+function writeNginxConf(domain, useSSL, certPath, keyPath) {
+  let conf;
+  if (useSSL && certPath && keyPath) {
+    conf = `# Configura\xE7\xE3o gerada automaticamente pelo FiberDoc
+# Redireciona HTTP para HTTPS
+server {
+    listen 80;
+    server_name ${domain};
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS com certificado Let's Encrypt
+server {
+    listen 443 ssl;
+    server_name ${domain};
+
+    ssl_certificate     ${certPath};
+    ssl_certificate_key ${keyPath};
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    proxy_read_timeout  120s;
+    proxy_send_timeout  120s;
+    client_max_body_size 50M;
+
+    location / {
+        proxy_pass         http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection 'upgrade';
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+`;
+  } else {
+    conf = `# Configura\xE7\xE3o tempor\xE1ria para valida\xE7\xE3o Let's Encrypt
+server {
+    listen 80;
+    server_name ${domain};
+
+    proxy_read_timeout  120s;
+    proxy_send_timeout  120s;
+    client_max_body_size 50M;
+
+    location / {
+        proxy_pass         http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection 'upgrade';
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto http;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+`;
+  }
+  fs.writeFileSync(NGINX_CONF_AVAILABLE, conf, "utf-8");
+  if (!fs.existsSync(NGINX_CONF_PATH)) {
+    try {
+      execSync(`ln -sf ${NGINX_CONF_AVAILABLE} ${NGINX_CONF_PATH}`);
+    } catch {
+      fs.writeFileSync(NGINX_CONF_PATH, conf, "utf-8");
+    }
+  } else {
+    fs.writeFileSync(NGINX_CONF_PATH, conf, "utf-8");
+  }
+}
+function reloadNginx() {
+  try {
+    execSync("nginx -t 2>&1", { timeout: 1e4 });
+    execSync("systemctl reload nginx 2>&1", { timeout: 1e4 });
+    return true;
+  } catch (e) {
+    throw new Error(`Falha ao recarregar Nginx: ${e.message}`);
+  }
+}
+function certbotExists() {
+  try {
+    execSync("which certbot", { timeout: 5e3 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function nginxExists() {
+  try {
+    execSync("which nginx", { timeout: 5e3 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function certificateExists(domain) {
+  const certPath = `/etc/letsencrypt/live/${domain}/fullchain.pem`;
+  return fs.existsSync(certPath);
+}
+async function configureDomainSsl(domain, email) {
+  if (sslStatus.running) {
+    throw new Error("Configura\xE7\xE3o SSL j\xE1 est\xE1 em andamento.");
+  }
+  const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+  if (!domainRegex.test(domain)) {
+    throw new Error("Dom\xEDnio inv\xE1lido. Use o formato: exemplo.com.br");
+  }
+  sslStatus = {
+    running: true,
+    progress: 0,
+    step: "iniciando",
+    log: [],
+    domain
+  };
+  setImmediate(async () => {
+    try {
+      setStatus(5, "verificando", "Verificando depend\xEAncias (nginx, certbot)...");
+      if (!nginxExists()) {
+        throw new Error("Nginx n\xE3o encontrado. Instale com: apt install nginx");
+      }
+      setStatus(10, "verificando", "\u2713 Nginx encontrado.");
+      if (!certbotExists()) {
+        setStatus(12, "instalando-certbot", "Certbot n\xE3o encontrado. Instalando...");
+        execSync("apt-get install -y certbot python3-certbot-nginx 2>&1", { timeout: 12e4 });
+        setStatus(20, "instalando-certbot", "\u2713 Certbot instalado.");
+      } else {
+        setStatus(20, "verificando", "\u2713 Certbot encontrado.");
+      }
+      setStatus(25, "nginx-temp", `Configurando Nginx para o dom\xEDnio ${domain}...`);
+      writeNginxConf(domain, false);
+      reloadNginx();
+      setStatus(35, "nginx-temp", "\u2713 Nginx configurado com dom\xEDnio.");
+      const certPath = `/etc/letsencrypt/live/${domain}/fullchain.pem`;
+      const keyPath = `/etc/letsencrypt/live/${domain}/privkey.pem`;
+      if (certificateExists(domain)) {
+        setStatus(40, "cert-exists", `Certificado para ${domain} j\xE1 existe. Renovando se necess\xE1rio...`);
+        try {
+          execSync(`certbot renew --cert-name ${domain} --non-interactive 2>&1`, { timeout: 12e4 });
+          setStatus(70, "cert-renewed", "\u2713 Certificado verificado/renovado.");
+        } catch {
+          setStatus(70, "cert-exists", "\u2713 Certificado existente ainda v\xE1lido.");
+        }
+      } else {
+        setStatus(40, "certbot", `Solicitando certificado Let's Encrypt para ${domain}...`);
+        setStatus(45, "certbot", "Isso pode levar at\xE9 2 minutos...");
+        try {
+          const certbotCmd = [
+            "certbot",
+            "certonly",
+            "--nginx",
+            "-d",
+            domain,
+            "--non-interactive",
+            "--agree-tos",
+            "--email",
+            email,
+            "--redirect"
+          ].join(" ");
+          execSync(`${certbotCmd} 2>&1`, { timeout: 18e4 });
+          setStatus(70, "certbot", "\u2713 Certificado Let's Encrypt obtido com sucesso!");
+        } catch (certErr) {
+          setStatus(50, "certbot-webroot", "Tentando m\xE9todo alternativo (webroot)...");
+          try {
+            const webrootCmd = [
+              "certbot",
+              "certonly",
+              "--webroot",
+              "-w",
+              "/var/www/html",
+              "-d",
+              domain,
+              "--non-interactive",
+              "--agree-tos",
+              "--email",
+              email
+            ].join(" ");
+            execSync(`${webrootCmd} 2>&1`, { timeout: 18e4 });
+            setStatus(70, "certbot-webroot", "\u2713 Certificado obtido via webroot.");
+          } catch (webErr) {
+            throw new Error(
+              `Falha ao obter certificado. Verifique se o dom\xEDnio ${domain} aponta para este servidor e se a porta 80 est\xE1 acess\xEDvel.
+Erro: ${certErr.message}`
+            );
+          }
+        }
+      }
+      setStatus(80, "nginx-ssl", "Configurando Nginx com SSL...");
+      writeNginxConf(domain, true, certPath, keyPath);
+      reloadNginx();
+      setStatus(90, "nginx-ssl", "\u2713 Nginx configurado com SSL Let's Encrypt.");
+      setStatus(95, "salvando", "Salvando configura\xE7\xF5es...");
+      try {
+        const { getDb: getDb2 } = await Promise.resolve().then(() => (init_db(), db_exports));
+        const { systemSettings: systemSettings2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+        const { eq: eq14 } = await import("drizzle-orm");
+        const db = await getDb2();
+        if (db) {
+          const publicUrl = `https://${domain}`;
+          const existing = await db.select().from(systemSettings2).where(eq14(systemSettings2.key, "serverPublicUrl")).limit(1);
+          if (existing.length > 0) {
+            await db.update(systemSettings2).set({ value: publicUrl }).where(eq14(systemSettings2.key, "serverPublicUrl"));
+          } else {
+            await db.insert(systemSettings2).values({ key: "serverPublicUrl", value: publicUrl });
+          }
+        }
+      } catch (dbErr) {
+        setStatus(95, "salvando", `Aviso: n\xE3o foi poss\xEDvel salvar URL nas configura\xE7\xF5es: ${dbErr.message}`);
+      }
+      setStatus(100, "concluido", `\u2705 Dom\xEDnio ${domain} configurado com SSL com sucesso!`);
+      setStatus(100, "concluido", `\u{1F512} Acesse: https://${domain}`);
+      sslStatus.running = false;
+      sslStatus.success = true;
+    } catch (err) {
+      const msg = err?.message ?? String(err);
+      sslStatus.running = false;
+      sslStatus.error = msg;
+      sslStatus.step = "erro";
+      sslStatus.log.push(`[${(/* @__PURE__ */ new Date()).toLocaleTimeString("pt-BR")}] \u274C Erro: ${msg}`);
+    }
+  });
+}
+
 // server/routers.ts
 init_trpc();
 init_db();
@@ -7954,7 +8246,7 @@ import { TRPCError as TRPCError5 } from "@trpc/server";
 init_storage();
 init_db();
 import path from "path";
-import fs from "fs";
+import fs2 from "fs";
 init_env();
 var schedulerInterval = null;
 var LOCAL_BACKUP_DIR = process.env.BACKUP_LOCAL_DIR || (process.env.NODE_ENV === "production" ? "/opt/fiberdoc/backups" : path.join(process.cwd(), ".local-backups"));
@@ -7991,11 +8283,11 @@ function calcNextRun(frequency, hour, dayOfWeek, dayOfMonth, from = /* @__PURE__
   return next;
 }
 function saveLocalBackup(filename, buffer) {
-  if (!fs.existsSync(LOCAL_BACKUP_DIR)) {
-    fs.mkdirSync(LOCAL_BACKUP_DIR, { recursive: true });
+  if (!fs2.existsSync(LOCAL_BACKUP_DIR)) {
+    fs2.mkdirSync(LOCAL_BACKUP_DIR, { recursive: true });
   }
   const filePath = path.join(LOCAL_BACKUP_DIR, filename);
-  fs.writeFileSync(filePath, buffer);
+  fs2.writeFileSync(filePath, buffer);
   return filePath;
 }
 async function runBackup(trigger) {
@@ -10734,8 +11026,8 @@ async function uploadFile(buffer, key, mimeType) {
     return url;
   }
   const fname = key.replace(/\//g, "-");
-  fs2.mkdirSync(LOCAL_UPLOADS_DIR, { recursive: true });
-  fs2.writeFileSync(path2.join(LOCAL_UPLOADS_DIR, fname), buffer);
+  fs3.mkdirSync(LOCAL_UPLOADS_DIR, { recursive: true });
+  fs3.writeFileSync(path2.join(LOCAL_UPLOADS_DIR, fname), buffer);
   return `/api/uploads/${fname}`;
 }
 var equipmentTypeEnum2 = z5.enum(["switch", "olt", "dgo", "splitter", "router", "server", "patch_panel", "amplifier", "other"]);
@@ -11517,7 +11809,7 @@ var appRouter = router({
       const { id, ...data } = input;
       await updateCeoBandeja(id, data);
     }),
-    delete: protectedProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ input }) => deleteCeoBandeja(input.id))
+    delete: protectedProcedure.input(z5.object({ id: z5.number(), deleteTubes: z5.boolean().optional().default(false) })).mutation(async ({ input }) => deleteCeoBandeja(input.id, input.deleteTubes))
   }),
   // ─── Splitters do CEO ─────────────────────────────────────────────────────
   ceoSplitters: router({
@@ -11882,7 +12174,20 @@ var appRouter = router({
       const url = await uploadFile(buffer, key, input.mimeType);
       await setSystemSettings({ logoUrl: url });
       return { url };
-    })
+    }),
+    // ─── Configuração de Domínio + SSL Let's Encrypt ─────────────────────────
+    configureSsl: adminProcedure.input(z5.object({
+      domain: z5.string().min(3, "Dom\xEDnio inv\xE1lido"),
+      email: z5.string().email("E-mail inv\xE1lido")
+    })).mutation(async ({ input }) => {
+      const status = getSslStatus();
+      if (status.running) {
+        throw new TRPCError5({ code: "CONFLICT", message: "Configura\xE7\xE3o SSL j\xE1 est\xE1 em andamento." });
+      }
+      await configureDomainSsl(input.domain, input.email);
+      return { started: true };
+    }),
+    sslStatus: adminProcedure.query(() => getSslStatus())
   }),
   // ─── Relatório de Ocupação ─────────────────────────────────────────────────
   reports: router({
@@ -14292,7 +14597,7 @@ async function tenantMiddleware(req, res, next) {
 
 // server/_core/tenantProvisioner.ts
 import mysql4 from "mysql2/promise";
-import fs4 from "fs";
+import fs5 from "fs";
 import path4 from "path";
 function buildPermissionHelp(user, host, dbName) {
   return `O usu\xE1rio MySQL '${user}' n\xE3o tem permiss\xE3o para criar bancos de dados. Execute o seguinte comando no MySQL como root para corrigir:
@@ -14368,13 +14673,13 @@ async function provisionTenantDatabase(dbName) {
         path4.join("/opt/fiberdoc", file),
         path4.join("/opt/fiberdoc/dist", file)
       ];
-      const sqlFile = candidates.find((f) => fs4.existsSync(f));
+      const sqlFile = candidates.find((f) => fs5.existsSync(f));
       if (!sqlFile) {
         console.log(`[Provisioner] ${file} n\xE3o encontrado \u2014 ignorado.`);
         continue;
       }
       try {
-        const sql5 = fs4.readFileSync(sqlFile, "utf-8");
+        const sql5 = fs5.readFileSync(sqlFile, "utf-8");
         const statements = sql5.split(";").map((s) => s.trim()).filter((s) => s.length > 0 && !s.startsWith("--"));
         for (const stmt of statements) {
           try {
@@ -15088,9 +15393,9 @@ import multer from "multer";
 // server/systemUpdate.ts
 init_db();
 init_schema();
-import fs5 from "fs";
+import fs6 from "fs";
 import path5 from "path";
-import { execSync } from "child_process";
+import { execSync as execSync2 } from "child_process";
 import { eq as eq12 } from "drizzle-orm";
 var updateStatus = {
   running: false,
@@ -15101,7 +15406,7 @@ var updateStatus = {
 function getUpdateStatus() {
   return { ...updateStatus, log: [...updateStatus.log] };
 }
-function setStatus(progress, step, logLine) {
+function setStatus2(progress, step, logLine) {
   updateStatus.progress = progress;
   updateStatus.step = step;
   if (logLine) updateStatus.log.push(`[${(/* @__PURE__ */ new Date()).toLocaleTimeString("pt-BR")}] ${logLine}`);
@@ -15109,7 +15414,7 @@ function setStatus(progress, step, logLine) {
 async function getCurrentVersion() {
   try {
     const pkgPath = path5.join(process.cwd(), "package.json");
-    const pkg = JSON.parse(fs5.readFileSync(pkgPath, "utf-8"));
+    const pkg = JSON.parse(fs6.readFileSync(pkgPath, "utf-8"));
     return {
       version: pkg.version ?? "3.0.0",
       buildDate: pkg.buildDate ?? (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
@@ -15148,14 +15453,14 @@ async function saveUpdateHistory(entry) {
 }
 function validateUpdatePackage(zipPath) {
   try {
-    const output = execSync(`unzip -l "${zipPath}" 2>&1`, { encoding: "utf-8" });
+    const output = execSync2(`unzip -l "${zipPath}" 2>&1`, { encoding: "utf-8" });
     const hasPackageJson = output.includes("package.json");
     const hasClientOrServer = output.includes("client/") || output.includes("server/") || output.includes("drizzle/");
     if (!hasPackageJson && !hasClientOrServer) {
       return { valid: false, error: "Pacote inv\xE1lido: n\xE3o cont\xE9m arquivos do FiberDoc (package.json, client/ ou server/)" };
     }
     try {
-      const pkgContent = execSync(`unzip -p "${zipPath}" package.json 2>/dev/null || unzip -p "${zipPath}" "*/package.json" 2>/dev/null`, {
+      const pkgContent = execSync2(`unzip -p "${zipPath}" package.json 2>/dev/null || unzip -p "${zipPath}" "*/package.json" 2>/dev/null`, {
         encoding: "utf-8"
       });
       const pkg = JSON.parse(pkgContent.trim());
@@ -15170,59 +15475,59 @@ function validateUpdatePackage(zipPath) {
 async function applyUpdate(zipPath, originalName) {
   if (updateStatus.running) throw new Error("J\xE1 existe uma atualiza\xE7\xE3o em andamento");
   updateStatus = { running: true, progress: 0, step: "validating", log: [] };
-  setStatus(5, "validating", `Iniciando atualiza\xE7\xE3o: ${originalName}`);
+  setStatus2(5, "validating", `Iniciando atualiza\xE7\xE3o: ${originalName}`);
   const isProduction = process.env.NODE_ENV === "production";
   const appDir = process.cwd();
   const tmpDir = path5.join("/tmp", `fiberdoc-update-${Date.now()}`);
   const backupDir = path5.join("/tmp", `fiberdoc-backup-${Date.now()}`);
   try {
-    setStatus(10, "validating", "Validando pacote ZIP...");
+    setStatus2(10, "validating", "Validando pacote ZIP...");
     const validation = validateUpdatePackage(zipPath);
     if (!validation.valid) throw new Error(validation.error);
-    setStatus(15, "validating", `Pacote v\xE1lido. Vers\xE3o detectada: ${validation.version}`);
-    setStatus(20, "backup", "Criando backup dos arquivos atuais...");
-    fs5.mkdirSync(backupDir, { recursive: true });
+    setStatus2(15, "validating", `Pacote v\xE1lido. Vers\xE3o detectada: ${validation.version}`);
+    setStatus2(20, "backup", "Criando backup dos arquivos atuais...");
+    fs6.mkdirSync(backupDir, { recursive: true });
     const criticalFiles = ["server", "client/src", "drizzle", "package.json", "tsconfig.json"];
     for (const f of criticalFiles) {
       const src = path5.join(appDir, f);
-      if (fs5.existsSync(src)) {
-        execSync(`cp -r "${src}" "${backupDir}/" 2>/dev/null || true`);
+      if (fs6.existsSync(src)) {
+        execSync2(`cp -r "${src}" "${backupDir}/" 2>/dev/null || true`);
       }
     }
-    setStatus(30, "backup", "Backup criado com sucesso");
-    setStatus(35, "extracting", "Extraindo pacote de atualiza\xE7\xE3o...");
-    fs5.mkdirSync(tmpDir, { recursive: true });
-    execSync(`unzip -q "${zipPath}" -d "${tmpDir}"`, { timeout: 6e4 });
-    const entries = fs5.readdirSync(tmpDir);
-    const extractDir = entries.length === 1 && fs5.statSync(path5.join(tmpDir, entries[0])).isDirectory() ? path5.join(tmpDir, entries[0]) : tmpDir;
-    setStatus(45, "extracting", `Extra\xEDdo em: ${extractDir}`);
-    setStatus(50, "copying", "Aplicando arquivos atualizados...");
+    setStatus2(30, "backup", "Backup criado com sucesso");
+    setStatus2(35, "extracting", "Extraindo pacote de atualiza\xE7\xE3o...");
+    fs6.mkdirSync(tmpDir, { recursive: true });
+    execSync2(`unzip -q "${zipPath}" -d "${tmpDir}"`, { timeout: 6e4 });
+    const entries = fs6.readdirSync(tmpDir);
+    const extractDir = entries.length === 1 && fs6.statSync(path5.join(tmpDir, entries[0])).isDirectory() ? path5.join(tmpDir, entries[0]) : tmpDir;
+    setStatus2(45, "extracting", `Extra\xEDdo em: ${extractDir}`);
+    setStatus2(50, "copying", "Aplicando arquivos atualizados...");
     const excludes = ["node_modules", ".env", "fiberdoc.env", "storage", ".manus-logs"];
-    const updateFiles = fs5.readdirSync(extractDir);
+    const updateFiles = fs6.readdirSync(extractDir);
     let copied = 0;
     for (const file of updateFiles) {
       if (excludes.includes(file)) continue;
       const src = path5.join(extractDir, file);
       const dst = path5.join(appDir, file);
-      execSync(`cp -r "${src}" "${dst}" 2>/dev/null || true`);
+      execSync2(`cp -r "${src}" "${dst}" 2>/dev/null || true`);
       copied++;
     }
-    setStatus(65, "copying", `${copied} itens copiados`);
+    setStatus2(65, "copying", `${copied} itens copiados`);
     if (isProduction) {
-      setStatus(70, "installing", "Instalando depend\xEAncias...");
-      execSync(`cd "${appDir}" && pnpm install --frozen-lockfile 2>&1 | tail -3`, {
+      setStatus2(70, "installing", "Instalando depend\xEAncias...");
+      execSync2(`cd "${appDir}" && pnpm install --frozen-lockfile 2>&1 | tail -3`, {
         timeout: 12e4,
         encoding: "utf-8"
       });
-      setStatus(80, "installing", "Depend\xEAncias instaladas");
-      setStatus(82, "building", "Compilando aplica\xE7\xE3o...");
-      execSync(`cd "${appDir}" && pnpm run build 2>&1 | tail -5`, {
+      setStatus2(80, "installing", "Depend\xEAncias instaladas");
+      setStatus2(82, "building", "Compilando aplica\xE7\xE3o...");
+      execSync2(`cd "${appDir}" && pnpm run build 2>&1 | tail -5`, {
         timeout: 18e4,
         encoding: "utf-8"
       });
-      setStatus(92, "building", "Build conclu\xEDdo");
+      setStatus2(92, "building", "Build conclu\xEDdo");
     }
-    setStatus(95, "saving", "Salvando hist\xF3rico de atualiza\xE7\xE3o...");
+    setStatus2(95, "saving", "Salvando hist\xF3rico de atualiza\xE7\xE3o...");
     await saveUpdateHistory({
       version: validation.version ?? "desconhecida",
       appliedAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -15230,23 +15535,23 @@ async function applyUpdate(zipPath, originalName) {
     });
     try {
       const newPkgPath = path5.join(extractDir, "package.json");
-      if (fs5.existsSync(newPkgPath)) {
-        const newPkg = JSON.parse(fs5.readFileSync(newPkgPath, "utf-8"));
+      if (fs6.existsSync(newPkgPath)) {
+        const newPkg = JSON.parse(fs6.readFileSync(newPkgPath, "utf-8"));
         const curPkgPath = path5.join(appDir, "package.json");
-        const curPkg = JSON.parse(fs5.readFileSync(curPkgPath, "utf-8"));
+        const curPkg = JSON.parse(fs6.readFileSync(curPkgPath, "utf-8"));
         curPkg.version = newPkg.version ?? curPkg.version;
         curPkg.buildDate = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-        fs5.writeFileSync(curPkgPath, JSON.stringify(curPkg, null, 2));
+        fs6.writeFileSync(curPkgPath, JSON.stringify(curPkg, null, 2));
       }
     } catch {
     }
-    setStatus(100, "done", "Atualiza\xE7\xE3o aplicada com sucesso!");
+    setStatus2(100, "done", "Atualiza\xE7\xE3o aplicada com sucesso!");
     updateStatus.running = false;
     updateStatus.completedAt = Date.now();
     if (isProduction) {
       setTimeout(() => {
         try {
-          execSync("systemctl restart fiberdoc 2>/dev/null || pm2 restart fiberdoc 2>/dev/null || true");
+          execSync2("systemctl restart fiberdoc 2>/dev/null || pm2 restart fiberdoc 2>/dev/null || true");
         } catch {
         }
       }, 2e3);
@@ -15254,28 +15559,28 @@ async function applyUpdate(zipPath, originalName) {
   } catch (err) {
     updateStatus.running = false;
     updateStatus.error = err.message;
-    setStatus(updateStatus.progress, "error", `ERRO: ${err.message}`);
-    if (isProduction && fs5.existsSync(backupDir)) {
+    setStatus2(updateStatus.progress, "error", `ERRO: ${err.message}`);
+    if (isProduction && fs6.existsSync(backupDir)) {
       try {
-        setStatus(updateStatus.progress, "rollback", "Restaurando backup ap\xF3s erro...");
-        execSync(`cp -r "${backupDir}/." "${appDir}/" 2>/dev/null || true`);
-        setStatus(updateStatus.progress, "rollback", "Backup restaurado");
+        setStatus2(updateStatus.progress, "rollback", "Restaurando backup ap\xF3s erro...");
+        execSync2(`cp -r "${backupDir}/." "${appDir}/" 2>/dev/null || true`);
+        setStatus2(updateStatus.progress, "rollback", "Backup restaurado");
       } catch {
       }
     }
     throw err;
   } finally {
     try {
-      fs5.rmSync(tmpDir, { recursive: true, force: true });
+      fs6.rmSync(tmpDir, { recursive: true, force: true });
     } catch {
     }
     try {
-      fs5.rmSync(zipPath, { force: true });
+      fs6.rmSync(zipPath, { force: true });
     } catch {
     }
     if (!isProduction) {
       try {
-        fs5.rmSync(backupDir, { recursive: true, force: true });
+        fs6.rmSync(backupDir, { recursive: true, force: true });
       } catch {
       }
     }
@@ -15426,8 +15731,8 @@ async function startServer() {
         res.status(403).json({ error: "Acesso negado" });
         return;
       }
-      const { execSync: execSync2 } = await import("child_process");
-      const ifaceOutput = execSync2("ip -o addr show", { encoding: "utf8" });
+      const { execSync: execSync3 } = await import("child_process");
+      const ifaceOutput = execSync3("ip -o addr show", { encoding: "utf8" });
       const interfaces = [];
       for (const line of ifaceOutput.split("\n")) {
         const m = line.match(/^\d+:\s+(\S+)\s+inet\s+([\d.]+)\/(\d+)/);
@@ -15439,7 +15744,7 @@ async function startServer() {
       let dns = "";
       let activeIface = interfaces.find((i) => i.type === "physical")?.name ?? "ens18";
       try {
-        const ifContent = fs6.readFileSync("/etc/network/interfaces", "utf8");
+        const ifContent = fs7.readFileSync("/etc/network/interfaces", "utf8");
         const gwMatch = ifContent.match(/gateway\s+([\d.]+)/);
         const dnsMatch = ifContent.match(/dns-nameservers\s+(.+)/);
         if (gwMatch) gateway = gwMatch[1].trim();
@@ -15447,7 +15752,7 @@ async function startServer() {
       } catch {
       }
       try {
-        const routeOut = execSync2("ip route show default", { encoding: "utf8" });
+        const routeOut = execSync3("ip route show default", { encoding: "utf8" });
         const rm = routeOut.match(/default via ([\d.]+)/);
         if (rm) gateway = rm[1];
       } catch {
@@ -15482,11 +15787,11 @@ async function startServer() {
         res.status(400).json({ error: "Nome de interface inv\xE1lido" });
         return;
       }
-      const { execSync: execSync2 } = await import("child_process");
+      const { execSync: execSync3 } = await import("child_process");
       const ifacePath = "/etc/network/interfaces";
       const backupPath = `/etc/network/interfaces.bak.${Date.now()}`;
       try {
-        fs6.copyFileSync(ifacePath, backupPath);
+        fs7.copyFileSync(ifacePath, backupPath);
       } catch {
       }
       const dnsLine = dns ? `
@@ -15503,25 +15808,25 @@ iface ${iface} inet static
         address ${ip}/${prefix}
         gateway ${gateway}${dnsLine}
 `;
-      fs6.writeFileSync(ifacePath, newContent, "utf8");
+      fs7.writeFileSync(ifacePath, newContent, "utf8");
       try {
-        const currentIpOut = execSync2(`ip addr show ${iface}`, { encoding: "utf8" });
+        const currentIpOut = execSync3(`ip addr show ${iface}`, { encoding: "utf8" });
         const currentIpMatch = currentIpOut.match(/inet ([\d.]+\/(\d+))/);
         if (currentIpMatch) {
-          execSync2(`ip addr del ${currentIpMatch[1]} dev ${iface}`, { encoding: "utf8" });
+          execSync3(`ip addr del ${currentIpMatch[1]} dev ${iface}`, { encoding: "utf8" });
         }
       } catch {
       }
       try {
-        execSync2(`ip addr add ${ip}/${prefix} dev ${iface}`, { encoding: "utf8" });
+        execSync3(`ip addr add ${ip}/${prefix} dev ${iface}`, { encoding: "utf8" });
       } catch {
       }
       try {
-        execSync2(`ip route del default`, { encoding: "utf8" });
+        execSync3(`ip route del default`, { encoding: "utf8" });
       } catch {
       }
       try {
-        execSync2(`ip route add default via ${gateway}`, { encoding: "utf8" });
+        execSync3(`ip route add default via ${gateway}`, { encoding: "utf8" });
       } catch {
       }
       res.json({ ok: true, message: `IP alterado para ${ip}/${prefix} na interface ${iface}. Gateway: ${gateway}. A configura\xE7\xE3o ser\xE1 mantida ap\xF3s reinicializa\xE7\xE3o.` });
@@ -15536,14 +15841,14 @@ iface ${iface} inet static
         return res.status(400).json({ error: "Nome de arquivo inv\xE1lido" });
       }
       const filePath = path6.join(LOCAL_UPLOADS_DIR2, filename);
-      if (!fs6.existsSync(filePath)) {
+      if (!fs7.existsSync(filePath)) {
         return res.status(404).json({ error: "Arquivo n\xE3o encontrado" });
       }
       const ext = path6.extname(filename).toLowerCase();
       const mimeTypes = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml" };
       res.setHeader("Content-Type", mimeTypes[ext] ?? "application/octet-stream");
       res.setHeader("Cache-Control", "public, max-age=86400");
-      fs6.createReadStream(filePath).pipe(res);
+      fs7.createReadStream(filePath).pipe(res);
     } catch (err) {
       console.error("[uploads] erro:", err);
       if (!res.headersSent) res.status(500).json({ error: "Erro ao servir arquivo" });
@@ -15556,12 +15861,12 @@ iface ${iface} inet static
         return res.status(400).json({ error: "Nome de arquivo inv\xE1lido" });
       }
       const filePath = path6.join(LOCAL_BACKUP_DIR, filename);
-      if (!fs6.existsSync(filePath)) {
+      if (!fs7.existsSync(filePath)) {
         return res.status(404).json({ error: "Arquivo n\xE3o encontrado" });
       }
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      fs6.createReadStream(filePath).pipe(res);
+      fs7.createReadStream(filePath).pipe(res);
     } catch (err) {
       console.error("[backup-download] erro:", err);
       if (!res.headersSent) res.status(500).json({ error: "Erro ao baixar backup" });

@@ -1,5 +1,8 @@
--- Migration: 0000_wealthy_hitman.sql
-CREATE TABLE `users` (
+-- FiberDoc Schema Consolidado (gerado automaticamente)
+-- Inclui todos os arquivos de migração Drizzle em ordem
+
+-- === drizzle/0000_wealthy_hitman.sql ===
+CREATE TABLE IF NOT EXISTS `users` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`openId` varchar(64) NOT NULL,
 	`name` text,
@@ -13,8 +16,8 @@ CREATE TABLE `users` (
 	CONSTRAINT `users_openId_unique` UNIQUE(`openId`)
 );
 
--- Migration: 0001_military_captain_marvel.sql
-CREATE TABLE `connections` (
+-- === drizzle/0001_military_captain_marvel.sql ===
+CREATE TABLE IF NOT EXISTS `connections` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128),
 	`sourcePortId` int NOT NULL,
@@ -27,8 +30,8 @@ CREATE TABLE `connections` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `connections_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `equipments` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `equipments` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`equipment_type` enum('switch','olt','dgo','splitter','router','server','patch_panel','amplifier','other') NOT NULL,
@@ -47,8 +50,8 @@ CREATE TABLE `equipments` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `equipments_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `fibers` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `fibers` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`originEquipmentId` int,
@@ -67,8 +70,8 @@ CREATE TABLE `fibers` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `fibers_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `maintenance_history` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `maintenance_history` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`entity_type` enum('equipment','fiber','port','connection','room') NOT NULL,
 	`entityId` int NOT NULL,
@@ -81,8 +84,8 @@ CREATE TABLE `maintenance_history` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `maintenance_history_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ports` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ports` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`portNumber` varchar(32) NOT NULL,
@@ -94,8 +97,8 @@ CREATE TABLE `ports` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ports_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `rooms` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `rooms` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`description` text,
@@ -106,17 +109,17 @@ CREATE TABLE `rooms` (
 	CONSTRAINT `rooms_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0002_cynical_tomas.sql
-ALTER TABLE `rooms` ADD `room_type` enum('datacenter','noc','pop','cabinet','outdoor','other') DEFAULT 'pop' NOT NULL;;
-ALTER TABLE `rooms` ADD `location` varchar(128);;
-ALTER TABLE `rooms` ADD `floor` varchar(32);;
-ALTER TABLE `rooms` ADD `state` varchar(32);;
-ALTER TABLE `rooms` ADD `notes` text;
--- Migration: 0003_furry_dexter_bennett.sql
-ALTER TABLE `ports` MODIFY COLUMN `port_type` enum('sc','lc','fc','st','rj45','sfp','sfp_plus','qsfp','qsfp28','qsfp_dd','cfp','cfp2','cfp4','gpon','xgspon','dag','other') NOT NULL DEFAULT 'lc';;
-ALTER TABLE `ports` ADD `port_speed` enum('1g','10g','25g','40g','100g','400g','other');
--- Migration: 0004_curly_kang.sql
-CREATE TABLE `equipment_slots` (
+-- === drizzle/0002_cynical_tomas.sql ===
+ALTER TABLE `rooms` ADD IF NOT EXISTS `room_type` enum('datacenter','noc','pop','cabinet','outdoor','other') DEFAULT 'pop' NOT NULL;--> statement-breakpoint
+ALTER TABLE `rooms` ADD IF NOT EXISTS `location` varchar(128);--> statement-breakpoint
+ALTER TABLE `rooms` ADD IF NOT EXISTS `floor` varchar(32);--> statement-breakpoint
+ALTER TABLE `rooms` ADD IF NOT EXISTS `state` varchar(32);--> statement-breakpoint
+ALTER TABLE `rooms` ADD IF NOT EXISTS `notes` text;
+-- === drizzle/0003_furry_dexter_bennett.sql ===
+ALTER TABLE `ports` MODIFY COLUMN `port_type` enum('sc','lc','fc','st','rj45','sfp','sfp_plus','qsfp','qsfp28','qsfp_dd','cfp','cfp2','cfp4','gpon','xgspon','dag','other') NOT NULL DEFAULT 'lc';--> statement-breakpoint
+ALTER TABLE `ports` ADD IF NOT EXISTS `port_speed` enum('1g','10g','25g','40g','100g','400g','other');
+-- === drizzle/0004_curly_kang.sql ===
+CREATE TABLE IF NOT EXISTS `equipment_slots` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`slotNumber` varchar(16) NOT NULL,
@@ -129,10 +132,10 @@ CREATE TABLE `equipment_slots` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `equipment_slots_id` PRIMARY KEY(`id`)
 );
-;
-ALTER TABLE `ports` ADD `slotId` int;
--- Migration: 0005_petite_wallflower.sql
-CREATE TABLE `ceo_tubes` (
+--> statement-breakpoint
+ALTER TABLE `ports` ADD IF NOT EXISTS `slotId` int;
+-- === drizzle/0005_petite_wallflower.sql ===
+CREATE TABLE IF NOT EXISTS `ceo_tubes` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`ceoId` int NOT NULL,
 	`ceo_tube_type` enum('tube','splitter') NOT NULL DEFAULT 'tube',
@@ -144,8 +147,8 @@ CREATE TABLE `ceo_tubes` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ceo_tubes_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ceo_vias` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ceo_vias` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`tubeId` int NOT NULL,
 	`ceoId` int NOT NULL,
@@ -158,8 +161,8 @@ CREATE TABLE `ceo_vias` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ceo_vias_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ceos` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ceos` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`location` varchar(256),
@@ -171,10 +174,10 @@ CREATE TABLE `ceos` (
 	CONSTRAINT `ceos_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0006_friendly_leopardon.sql
-ALTER TABLE `ceo_vias` ADD `fiberId` int;
--- Migration: 0007_cool_franklin_storm.sql
-CREATE TABLE `backup_history` (
+-- === drizzle/0006_friendly_leopardon.sql ===
+ALTER TABLE `ceo_vias` ADD IF NOT EXISTS `fiberId` int;
+-- === drizzle/0007_cool_franklin_storm.sql ===
+CREATE TABLE IF NOT EXISTS `backup_history` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`filename` varchar(256) NOT NULL,
 	`fileUrl` text,
@@ -187,8 +190,8 @@ CREATE TABLE `backup_history` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `backup_history_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `backup_schedules` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `backup_schedules` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`enabled` boolean NOT NULL DEFAULT false,
 	`frequency` enum('daily','weekly','monthly') NOT NULL DEFAULT 'weekly',
@@ -203,8 +206,8 @@ CREATE TABLE `backup_schedules` (
 	CONSTRAINT `backup_schedules_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0008_lying_orphan.sql
-CREATE TABLE `system_settings` (
+-- === drizzle/0008_lying_orphan.sql ===
+CREATE TABLE IF NOT EXISTS `system_settings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`key` varchar(64) NOT NULL,
 	`value` text,
@@ -212,16 +215,16 @@ CREATE TABLE `system_settings` (
 	CONSTRAINT `system_settings_id` PRIMARY KEY(`id`),
 	CONSTRAINT `system_settings_key_unique` UNIQUE(`key`)
 );
-;
-ALTER TABLE `equipments` ADD `imageUrl` text;
--- Migration: 0009_cuddly_rachel_grey.sql
-ALTER TABLE `equipments` ADD `power_type` enum('ac','dc');;
-ALTER TABLE `equipments` ADD `power_source` enum('rectifier','inverter','ups','grid','other');;
-ALTER TABLE `equipments` ADD `powerSourceLabel` varchar(128);
--- Migration: 0010_workable_harry_osborn.sql
-ALTER TABLE `users` ADD `passwordHash` varchar(255);
--- Migration: 0011_fast_power_pack.sql
-CREATE TABLE `ip_addresses` (
+--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `imageUrl` text;
+-- === drizzle/0009_cuddly_rachel_grey.sql ===
+ALTER TABLE `equipments` ADD IF NOT EXISTS `power_type` enum('ac','dc');--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `power_source` enum('rectifier','inverter','ups','grid','other');--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `powerSourceLabel` varchar(128);
+-- === drizzle/0010_workable_harry_osborn.sql ===
+ALTER TABLE `users` ADD IF NOT EXISTS `passwordHash` varchar(255);
+-- === drizzle/0011_fast_power_pack.sql ===
+CREATE TABLE IF NOT EXISTS `ip_addresses` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`blockId` int NOT NULL,
 	`address` varchar(39) NOT NULL,
@@ -237,8 +240,8 @@ CREATE TABLE `ip_addresses` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ip_addresses_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ip_blocks` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ip_blocks` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`cidr` varchar(43) NOT NULL,
@@ -258,17 +261,17 @@ CREATE TABLE `ip_blocks` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ip_blocks_id` PRIMARY KEY(`id`)
 );
-;
-ALTER TABLE `ip_addresses` ADD CONSTRAINT `ip_addresses_blockId_ip_blocks_id_fk` FOREIGN KEY (`blockId`) REFERENCES `ip_blocks`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `ip_addresses` ADD CONSTRAINT `ip_addresses_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE set null ON UPDATE no action;;
+--> statement-breakpoint
+ALTER TABLE `ip_addresses` ADD CONSTRAINT `ip_addresses_blockId_ip_blocks_id_fk` FOREIGN KEY (`blockId`) REFERENCES `ip_blocks`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `ip_addresses` ADD CONSTRAINT `ip_addresses_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `ip_blocks` ADD CONSTRAINT `ip_blocks_roomId_rooms_id_fk` FOREIGN KEY (`roomId`) REFERENCES `rooms`(`id`) ON DELETE set null ON UPDATE no action;
--- Migration: 0012_optimal_brother_voodoo.sql
-ALTER TABLE `equipments` ADD `vlan` int;;
-ALTER TABLE `equipments` ADD `interfaceIp` varchar(64);;
-ALTER TABLE `equipments` ADD `ipBlockId` int;;
-ALTER TABLE `equipments` ADD `serviceDescription` varchar(255);
--- Migration: 0013_unusual_bruce_banner.sql
-CREATE TABLE `ip_audit_log` (
+-- === drizzle/0012_optimal_brother_voodoo.sql ===
+ALTER TABLE `equipments` ADD IF NOT EXISTS `vlan` int;--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `interfaceIp` varchar(64);--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `ipBlockId` int;--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `serviceDescription` varchar(255);
+-- === drizzle/0013_unusual_bruce_banner.sql ===
+CREATE TABLE IF NOT EXISTS `ip_audit_log` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`blockId` int NOT NULL,
 	`addressId` int,
@@ -286,10 +289,10 @@ CREATE TABLE `ip_audit_log` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `ip_audit_log_id` PRIMARY KEY(`id`)
 );
-;
+--> statement-breakpoint
 ALTER TABLE `ip_audit_log` ADD CONSTRAINT `ip_audit_log_blockId_ip_blocks_id_fk` FOREIGN KEY (`blockId`) REFERENCES `ip_blocks`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0014_sad_jigsaw.sql
-CREATE TABLE `equipment_interfaces` (
+-- === drizzle/0014_sad_jigsaw.sql ===
+CREATE TABLE IF NOT EXISTS `equipment_interfaces` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`name` varchar(64) NOT NULL,
@@ -304,11 +307,11 @@ CREATE TABLE `equipment_interfaces` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `equipment_interfaces_id` PRIMARY KEY(`id`)
 );
-;
-ALTER TABLE `equipment_interfaces` ADD CONSTRAINT `equipment_interfaces_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;;
+--> statement-breakpoint
+ALTER TABLE `equipment_interfaces` ADD CONSTRAINT `equipment_interfaces_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `equipment_interfaces` ADD CONSTRAINT `equipment_interfaces_ipBlockId_ip_blocks_id_fk` FOREIGN KEY (`ipBlockId`) REFERENCES `ip_blocks`(`id`) ON DELETE set null ON UPDATE no action;
--- Migration: 0015_mighty_jetstream.sql
-CREATE TABLE `power_sources` (
+-- === drizzle/0015_mighty_jetstream.sql ===
+CREATE TABLE IF NOT EXISTS `power_sources` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`ps_type` enum('rectifier','inverter','ups','grid','generator','other') NOT NULL DEFAULT 'rectifier',
@@ -348,12 +351,12 @@ CREATE TABLE `power_sources` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `power_sources_id` PRIMARY KEY(`id`)
 );
-;
+--> statement-breakpoint
 ALTER TABLE `power_sources` ADD CONSTRAINT `power_sources_roomId_rooms_id_fk` FOREIGN KEY (`roomId`) REFERENCES `rooms`(`id`) ON DELETE set null ON UPDATE no action;
--- Migration: 0016_clumsy_romulus.sql
-ALTER TABLE `equipments` ADD `powerSourceId` int;
--- Migration: 0017_strong_chat.sql
-CREATE TABLE `snmp_alerts` (
+-- === drizzle/0016_clumsy_romulus.sql ===
+ALTER TABLE `equipments` ADD IF NOT EXISTS `powerSourceId` int;
+-- === drizzle/0017_strong_chat.sql ===
+CREATE TABLE IF NOT EXISTS `snmp_alerts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`powerSourceId` int NOT NULL,
 	`alert_type` enum('temp_high','voltage_low','voltage_high','battery_low','battery_high','current_high','load_high','ac_fail','snmp_unreachable') NOT NULL,
@@ -368,20 +371,20 @@ CREATE TABLE `snmp_alerts` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `snmp_alerts_id` PRIMARY KEY(`id`)
 );
-;
+--> statement-breakpoint
 ALTER TABLE `snmp_alerts` ADD CONSTRAINT `snmp_alerts_powerSourceId_power_sources_id_fk` FOREIGN KEY (`powerSourceId`) REFERENCES `power_sources`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0018_past_sheva_callister.sql
-ALTER TABLE `power_sources` ADD `alertsEnabled` boolean DEFAULT false NOT NULL;;
-ALTER TABLE `power_sources` ADD `alertTempMax` float;;
-ALTER TABLE `power_sources` ADD `alertVoltageMin` float;;
-ALTER TABLE `power_sources` ADD `alertVoltageMax` float;;
-ALTER TABLE `power_sources` ADD `alertBatteryMin` float;;
-ALTER TABLE `power_sources` ADD `alertBatteryMax` float;;
-ALTER TABLE `power_sources` ADD `alertCurrentMax` float;;
-ALTER TABLE `power_sources` ADD `alertLoadMax` float;;
-ALTER TABLE `power_sources` ADD `alertAcFailEnabled` boolean DEFAULT false NOT NULL;
--- Migration: 0019_volatile_boomerang.sql
-CREATE TABLE `tuya_devices` (
+-- === drizzle/0018_past_sheva_callister.sql ===
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `alertsEnabled` boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `alertTempMax` float;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `alertVoltageMin` float;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `alertVoltageMax` float;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `alertBatteryMin` float;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `alertBatteryMax` float;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `alertCurrentMax` float;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `alertLoadMax` float;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `alertAcFailEnabled` boolean DEFAULT false NOT NULL;
+-- === drizzle/0019_volatile_boomerang.sql ===
+CREATE TABLE IF NOT EXISTS `tuya_devices` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`deviceId` varchar(128) NOT NULL,
@@ -412,11 +415,11 @@ CREATE TABLE `tuya_devices` (
 	CONSTRAINT `tuya_devices_id` PRIMARY KEY(`id`),
 	CONSTRAINT `tuya_devices_deviceId_unique` UNIQUE(`deviceId`)
 );
-;
-ALTER TABLE `tuya_devices` ADD CONSTRAINT `tuya_devices_roomId_rooms_id_fk` FOREIGN KEY (`roomId`) REFERENCES `rooms`(`id`) ON DELETE set null ON UPDATE no action;;
+--> statement-breakpoint
+ALTER TABLE `tuya_devices` ADD CONSTRAINT `tuya_devices_roomId_rooms_id_fk` FOREIGN KEY (`roomId`) REFERENCES `rooms`(`id`) ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `tuya_devices` ADD CONSTRAINT `tuya_devices_powerSourceId_power_sources_id_fk` FOREIGN KEY (`powerSourceId`) REFERENCES `power_sources`(`id`) ON DELETE set null ON UPDATE no action;
--- Migration: 0020_little_wendell_rand.sql
-CREATE TABLE `tuya_accounts` (
+-- === drizzle/0020_little_wendell_rand.sql ===
+CREATE TABLE IF NOT EXISTS `tuya_accounts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`accessId` varchar(128) NOT NULL,
@@ -427,11 +430,11 @@ CREATE TABLE `tuya_accounts` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `tuya_accounts_id` PRIMARY KEY(`id`)
 );
-;
-ALTER TABLE `tuya_devices` ADD `tuyaAccountId` int;;
+--> statement-breakpoint
+ALTER TABLE `tuya_devices` ADD IF NOT EXISTS `tuyaAccountId` int;--> statement-breakpoint
 ALTER TABLE `tuya_devices` ADD CONSTRAINT `tuya_devices_tuyaAccountId_tuya_accounts_id_fk` FOREIGN KEY (`tuyaAccountId`) REFERENCES `tuya_accounts`(`id`) ON DELETE set null ON UPDATE no action;
--- Migration: 0021_curly_mysterio.sql
-CREATE TABLE `tuya_readings` (
+-- === drizzle/0021_curly_mysterio.sql ===
+CREATE TABLE IF NOT EXISTS `tuya_readings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`deviceId` int NOT NULL,
 	`temperature` float,
@@ -444,19 +447,19 @@ CREATE TABLE `tuya_readings` (
 	`collectedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `tuya_readings_id` PRIMARY KEY(`id`)
 );
-;
+--> statement-breakpoint
 ALTER TABLE `tuya_readings` ADD CONSTRAINT `tuya_readings_deviceId_tuya_devices_id_fk` FOREIGN KEY (`deviceId`) REFERENCES `tuya_devices`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0022_black_tombstone.sql
-ALTER TABLE `users` ADD `mustChangePassword` boolean DEFAULT false NOT NULL;
--- Migration: 0023_cold_colossus.sql
-ALTER TABLE `ports` ADD `sortOrder` int DEFAULT 0 NOT NULL;
--- Migration: 0024_reflective_magus.sql
-ALTER TABLE `equipments` ADD `rackUnits` int DEFAULT 1;
--- Migration: 0025_marvelous_warpath.sql
-ALTER TABLE `ports` ADD `connectedToEquipmentId` int;;
-ALTER TABLE `ports` ADD `connectedToPortId` int;
--- Migration: 0026_mixed_krista_starr.sql
-CREATE TABLE `topology_layouts` (
+-- === drizzle/0022_black_tombstone.sql ===
+ALTER TABLE `users` ADD IF NOT EXISTS `mustChangePassword` boolean DEFAULT false NOT NULL;
+-- === drizzle/0023_cold_colossus.sql ===
+ALTER TABLE `ports` ADD IF NOT EXISTS `sortOrder` int DEFAULT 0 NOT NULL;
+-- === drizzle/0024_reflective_magus.sql ===
+ALTER TABLE `equipments` ADD IF NOT EXISTS `rackUnits` int DEFAULT 1;
+-- === drizzle/0025_marvelous_warpath.sql ===
+ALTER TABLE `ports` ADD IF NOT EXISTS `connectedToEquipmentId` int;--> statement-breakpoint
+ALTER TABLE `ports` ADD IF NOT EXISTS `connectedToPortId` int;
+-- === drizzle/0026_mixed_krista_starr.sql ===
+CREATE TABLE IF NOT EXISTS `topology_layouts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int NOT NULL,
 	`roomFilter` varchar(32) NOT NULL DEFAULT 'all',
@@ -466,8 +469,8 @@ CREATE TABLE `topology_layouts` (
 	CONSTRAINT `topology_layouts_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0027_stormy_red_shift.sql
-CREATE TABLE `snmp_readings` (
+-- === drizzle/0027_stormy_red_shift.sql ===
+CREATE TABLE IF NOT EXISTS `snmp_readings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`powerSourceId` int NOT NULL,
 	`voltage` float,
@@ -479,15 +482,15 @@ CREATE TABLE `snmp_readings` (
 	`collectedAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `snmp_readings_id` PRIMARY KEY(`id`)
 );
-;
+--> statement-breakpoint
 ALTER TABLE `snmp_readings` ADD CONSTRAINT `snmp_readings_powerSourceId_power_sources_id_fk` FOREIGN KEY (`powerSourceId`) REFERENCES `power_sources`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0028_brown_robin_chapel.sql
-ALTER TABLE `power_sources` ADD `snmpVoltageDivisor` float DEFAULT 1;;
-ALTER TABLE `power_sources` ADD `snmpCurrentDivisor` float DEFAULT 1;;
-ALTER TABLE `power_sources` ADD `snmpTempDivisor` float DEFAULT 1;;
-ALTER TABLE `power_sources` ADD `snmpBatteryDivisor` float DEFAULT 1;
--- Migration: 0029_great_white_tiger.sql
-CREATE TABLE `racks` (
+-- === drizzle/0028_brown_robin_chapel.sql ===
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `snmpVoltageDivisor` float DEFAULT 1;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `snmpCurrentDivisor` float DEFAULT 1;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `snmpTempDivisor` float DEFAULT 1;--> statement-breakpoint
+ALTER TABLE `power_sources` ADD IF NOT EXISTS `snmpBatteryDivisor` float DEFAULT 1;
+-- === drizzle/0029_great_white_tiger.sql ===
+CREATE TABLE IF NOT EXISTS `racks` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(64) NOT NULL,
 	`roomId` int,
@@ -497,10 +500,10 @@ CREATE TABLE `racks` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `racks_id` PRIMARY KEY(`id`)
 );
-;
+--> statement-breakpoint
 ALTER TABLE `racks` ADD CONSTRAINT `racks_roomId_rooms_id_fk` FOREIGN KEY (`roomId`) REFERENCES `rooms`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0030_mighty_legion.sql
-CREATE TABLE `ctos` (
+-- === drizzle/0030_mighty_legion.sql ===
+CREATE TABLE IF NOT EXISTS `ctos` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`address` varchar(256),
@@ -514,8 +517,8 @@ CREATE TABLE `ctos` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ctos_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `map_elements` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `map_elements` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`type` varchar(8) NOT NULL,
 	`referenceId` int NOT NULL,
@@ -524,8 +527,8 @@ CREATE TABLE `map_elements` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `map_elements_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `map_routes` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `map_routes` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128),
 	`fromElementId` int NOT NULL,
@@ -539,8 +542,8 @@ CREATE TABLE `map_routes` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `map_routes_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `sgp_config` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `sgp_config` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`baseUrl` varchar(256) NOT NULL,
 	`token` varchar(512) NOT NULL,
@@ -550,8 +553,8 @@ CREATE TABLE `sgp_config` (
 	CONSTRAINT `sgp_config_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0031_free_diamondback.sql
-CREATE TABLE `cto_alert_config` (
+-- === drizzle/0031_free_diamondback.sql ===
+CREATE TABLE IF NOT EXISTS `cto_alert_config` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`enabled` boolean DEFAULT false,
 	`warningThreshold` int DEFAULT 80,
@@ -560,8 +563,8 @@ CREATE TABLE `cto_alert_config` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `cto_alert_config_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `cto_alerts` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `cto_alerts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`ctoId` int NOT NULL,
 	`occupancyPct` int NOT NULL,
@@ -575,15 +578,15 @@ CREATE TABLE `cto_alerts` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `cto_alerts_id` PRIMARY KEY(`id`)
 );
-;
+--> statement-breakpoint
 ALTER TABLE `cto_alerts` ADD CONSTRAINT `cto_alerts_ctoId_ctos_id_fk` FOREIGN KEY (`ctoId`) REFERENCES `ctos`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0032_redundant_leader.sql
-ALTER TABLE `map_routes` MODIFY COLUMN `fromElementId` int;;
+-- === drizzle/0032_redundant_leader.sql ===
+ALTER TABLE `map_routes` MODIFY COLUMN `fromElementId` int;--> statement-breakpoint
 ALTER TABLE `map_routes` MODIFY COLUMN `toElementId` int;
--- Migration: 0033_workable_robin_chapel.sql
-ALTER TABLE `backup_history` ADD `localPath` varchar(512);
--- Migration: 0034_narrow_domino.sql
-CREATE TABLE `cto_tubes` (
+-- === drizzle/0033_workable_robin_chapel.sql ===
+ALTER TABLE `backup_history` ADD IF NOT EXISTS `localPath` varchar(512);
+-- === drizzle/0034_narrow_domino.sql ===
+CREATE TABLE IF NOT EXISTS `cto_tubes` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`ctoId` int NOT NULL,
 	`cto_tube_type` enum('tube','splitter') NOT NULL DEFAULT 'tube',
@@ -595,8 +598,8 @@ CREATE TABLE `cto_tubes` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `cto_tubes_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `cto_vias` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `cto_vias` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`tubeId` int NOT NULL,
 	`ctoId` int NOT NULL,
@@ -611,15 +614,15 @@ CREATE TABLE `cto_vias` (
 	CONSTRAINT `cto_vias_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0035_spooky_lord_tyger.sql
-CREATE TABLE `map_element_groups` (
+-- === drizzle/0035_spooky_lord_tyger.sql ===
+CREATE TABLE IF NOT EXISTS `map_element_groups` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`elementId` int NOT NULL,
 	`groupId` int NOT NULL,
 	CONSTRAINT `map_element_groups_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `map_groups` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `map_groups` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`color` varchar(16) NOT NULL DEFAULT '#6366f1',
@@ -628,16 +631,16 @@ CREATE TABLE `map_groups` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `map_groups_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `map_route_groups` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `map_route_groups` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`routeId` int NOT NULL,
 	`groupId` int NOT NULL,
 	CONSTRAINT `map_route_groups_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0036_cynical_masked_marvel.sql
-CREATE TABLE `app_settings` (
+-- === drizzle/0036_cynical_masked_marvel.sql ===
+CREATE TABLE IF NOT EXISTS `app_settings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`key` varchar(128) NOT NULL,
 	`value` text,
@@ -645,15 +648,15 @@ CREATE TABLE `app_settings` (
 	CONSTRAINT `app_settings_id` PRIMARY KEY(`id`),
 	CONSTRAINT `app_settings_key_unique` UNIQUE(`key`)
 );
-;
-ALTER TABLE `equipments` ADD `voltage` float;;
-ALTER TABLE `equipments` ADD `powerConsumptionW` float;;
-ALTER TABLE `map_routes` ADD `fromTubeId` int;;
-ALTER TABLE `map_routes` ADD `toTubeId` int;
--- Migration: 0037_sweet_triton.sql
-ALTER TABLE `ctos` ADD `sgpId` int;
--- Migration: 0038_lame_morgan_stark.sql
-CREATE TABLE `sgp_link_history` (
+--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `voltage` float;--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `powerConsumptionW` float;--> statement-breakpoint
+ALTER TABLE `map_routes` ADD IF NOT EXISTS `fromTubeId` int;--> statement-breakpoint
+ALTER TABLE `map_routes` ADD IF NOT EXISTS `toTubeId` int;
+-- === drizzle/0037_sweet_triton.sql ===
+ALTER TABLE `ctos` ADD IF NOT EXISTS `sgpId` int;
+-- === drizzle/0038_lame_morgan_stark.sql ===
+CREATE TABLE IF NOT EXISTS `sgp_link_history` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`ctoId` int NOT NULL,
 	`ctoName` varchar(128) NOT NULL,
@@ -663,10 +666,10 @@ CREATE TABLE `sgp_link_history` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `sgp_link_history_id` PRIMARY KEY(`id`)
 );
-;
+--> statement-breakpoint
 ALTER TABLE `sgp_link_history` ADD CONSTRAINT `sgp_link_history_ctoId_ctos_id_fk` FOREIGN KEY (`ctoId`) REFERENCES `ctos`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0039_nebulous_vengeance.sql
-CREATE TABLE `ceo_bandejas` (
+-- === drizzle/0039_nebulous_vengeance.sql ===
+CREATE TABLE IF NOT EXISTS `ceo_bandejas` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`ceoId` int NOT NULL,
 	`number` int NOT NULL,
@@ -676,8 +679,8 @@ CREATE TABLE `ceo_bandejas` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ceo_bandejas_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ceo_splitter_vias` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ceo_splitter_vias` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`splitterId` int NOT NULL,
 	`ceoId` int NOT NULL,
@@ -689,8 +692,8 @@ CREATE TABLE `ceo_splitter_vias` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ceo_splitter_vias_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ceo_splitters` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ceo_splitters` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`ceoId` int NOT NULL,
 	`bandejaId` int NOT NULL,
@@ -702,8 +705,8 @@ CREATE TABLE `ceo_splitters` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ceo_splitters_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ceo_via_associations` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ceo_via_associations` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`ceoId` int NOT NULL,
 	`ceo_assoc_source_type` enum('tube','splitter') NOT NULL,
@@ -714,10 +717,10 @@ CREATE TABLE `ceo_via_associations` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `ceo_via_associations_id` PRIMARY KEY(`id`)
 );
-;
-ALTER TABLE `ceo_tubes` ADD `bandejaId` int;
--- Migration: 0040_medical_lockheed.sql
-CREATE TABLE `ssh_commands` (
+--> statement-breakpoint
+ALTER TABLE `ceo_tubes` ADD IF NOT EXISTS `bandejaId` int;
+-- === drizzle/0040_medical_lockheed.sql ===
+CREATE TABLE IF NOT EXISTS `ssh_commands` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`name` varchar(128) NOT NULL,
@@ -728,8 +731,8 @@ CREATE TABLE `ssh_commands` (
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ssh_commands_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ssh_credentials` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ssh_credentials` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`sshUser` varchar(128) NOT NULL,
@@ -741,8 +744,8 @@ CREATE TABLE `ssh_credentials` (
 	CONSTRAINT `ssh_credentials_id` PRIMARY KEY(`id`),
 	CONSTRAINT `ssh_credentials_equipmentId_unique` UNIQUE(`equipmentId`)
 );
-;
-CREATE TABLE `ssh_execution_log` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ssh_execution_log` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`commandId` int,
@@ -755,14 +758,14 @@ CREATE TABLE `ssh_execution_log` (
 	CONSTRAINT `ssh_execution_log_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0041_third_ravenous.sql
-ALTER TABLE `ssh_commands` ADD `ssh_confirm_mode` enum('none','auto_y','auto_n','manual') DEFAULT 'none' NOT NULL;
--- Migration: 0042_dark_bastion.sql
-ALTER TABLE `equipments` ADD `sshUser` varchar(64);;
-ALTER TABLE `equipments` ADD `sshPasswordEnc` text;;
-ALTER TABLE `equipments` ADD `sshPort` int DEFAULT 22;
--- Migration: 0043_bitter_sentinel.sql
-CREATE TABLE `bgp_peers` (
+-- === drizzle/0041_third_ravenous.sql ===
+ALTER TABLE `ssh_commands` ADD IF NOT EXISTS `ssh_confirm_mode` enum('none','auto_y','auto_n','manual') DEFAULT 'none' NOT NULL;
+-- === drizzle/0042_dark_bastion.sql ===
+ALTER TABLE `equipments` ADD IF NOT EXISTS `sshUser` varchar(64);--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `sshPasswordEnc` text;--> statement-breakpoint
+ALTER TABLE `equipments` ADD IF NOT EXISTS `sshPort` int DEFAULT 22;
+-- === drizzle/0043_bitter_sentinel.sql ===
+CREATE TABLE IF NOT EXISTS `bgp_peers` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`device_id` int NOT NULL,
 	`peer_ip` varchar(45) NOT NULL,
@@ -777,8 +780,8 @@ CREATE TABLE `bgp_peers` (
 	`bgp_peer_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `bgp_peers_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ssh_device_commands` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ssh_device_commands` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`device_id` int NOT NULL,
 	`name` varchar(100) NOT NULL,
@@ -792,8 +795,8 @@ CREATE TABLE `ssh_device_commands` (
 	`ssh_dcmd_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ssh_device_commands_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ssh_devices` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ssh_devices` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(100) NOT NULL,
 	`host` varchar(255) NOT NULL,
@@ -808,8 +811,8 @@ CREATE TABLE `ssh_devices` (
 	`ssh_device_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `ssh_devices_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ssh_executions` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ssh_executions` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`device_id` int NOT NULL,
 	`command_name` varchar(100),
@@ -821,8 +824,8 @@ CREATE TABLE `ssh_executions` (
 	`ssh_executed_at` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `ssh_executions_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `ssh_quick_commands` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `ssh_quick_commands` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(100) NOT NULL,
 	`description` text,
@@ -835,12 +838,12 @@ CREATE TABLE `ssh_quick_commands` (
 	CONSTRAINT `ssh_quick_commands_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0044_slow_johnny_storm.sql
-ALTER TABLE `map_elements` ADD `color` varchar(16);
--- Migration: 0045_last_pretty_boy.sql
+-- === drizzle/0044_slow_johnny_storm.sql ===
+ALTER TABLE `map_elements` ADD IF NOT EXISTS `color` varchar(16);
+-- === drizzle/0045_last_pretty_boy.sql ===
 ALTER TABLE `users` MODIFY COLUMN `role` enum('user','admin','operator') NOT NULL DEFAULT 'user';
--- Migration: 0046_funny_magma.sql
-CREATE TABLE `network_port_readings` (
+-- === drizzle/0046_funny_magma.sql ===
+CREATE TABLE IF NOT EXISTS `network_port_readings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`portId` int NOT NULL,
 	`equipmentId` int NOT NULL,
@@ -852,8 +855,8 @@ CREATE TABLE `network_port_readings` (
 	`net_port_reading_at` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `network_port_readings_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `network_snmp_alerts` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `network_snmp_alerts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`portId` int,
@@ -869,8 +872,8 @@ CREATE TABLE `network_snmp_alerts` (
 	`net_alert_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `network_snmp_alerts_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `network_snmp_config` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `network_snmp_config` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`enabled` boolean NOT NULL DEFAULT false,
@@ -900,8 +903,8 @@ CREATE TABLE `network_snmp_config` (
 	CONSTRAINT `network_snmp_config_id` PRIMARY KEY(`id`),
 	CONSTRAINT `network_snmp_config_equipmentId_unique` UNIQUE(`equipmentId`)
 );
-;
-CREATE TABLE `network_snmp_ports` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `network_snmp_ports` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`ifIndex` int NOT NULL,
@@ -927,8 +930,8 @@ CREATE TABLE `network_snmp_ports` (
 	`net_port_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `network_snmp_ports_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `network_snmp_readings` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `network_snmp_readings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`cpuPercent` float,
@@ -938,15 +941,15 @@ CREATE TABLE `network_snmp_readings` (
 	`net_reading_collected_at` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `network_snmp_readings_id` PRIMARY KEY(`id`)
 );
-;
-ALTER TABLE `network_port_readings` ADD CONSTRAINT `network_port_readings_portId_network_snmp_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `network_snmp_ports`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `network_snmp_alerts` ADD CONSTRAINT `network_snmp_alerts_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `network_snmp_alerts` ADD CONSTRAINT `network_snmp_alerts_portId_network_snmp_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `network_snmp_ports`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `network_snmp_config` ADD CONSTRAINT `network_snmp_config_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `network_snmp_ports` ADD CONSTRAINT `network_snmp_ports_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;;
+--> statement-breakpoint
+ALTER TABLE `network_port_readings` ADD CONSTRAINT `network_port_readings_portId_network_snmp_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `network_snmp_ports`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `network_snmp_alerts` ADD CONSTRAINT `network_snmp_alerts_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `network_snmp_alerts` ADD CONSTRAINT `network_snmp_alerts_portId_network_snmp_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `network_snmp_ports`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `network_snmp_config` ADD CONSTRAINT `network_snmp_config_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `network_snmp_ports` ADD CONSTRAINT `network_snmp_ports_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `network_snmp_readings` ADD CONSTRAINT `network_snmp_readings_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0046_nervous_tattoo.sql
-CREATE TABLE `network_port_readings` (
+-- === drizzle/0046_nervous_tattoo.sql ===
+CREATE TABLE IF NOT EXISTS `network_port_readings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`portId` int NOT NULL,
 	`equipmentId` int NOT NULL,
@@ -958,8 +961,8 @@ CREATE TABLE `network_port_readings` (
 	`net_port_reading_at` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `network_port_readings_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `network_snmp_alerts` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `network_snmp_alerts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`portId` int,
@@ -975,8 +978,8 @@ CREATE TABLE `network_snmp_alerts` (
 	`net_alert_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `network_snmp_alerts_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `network_snmp_config` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `network_snmp_config` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`enabled` boolean NOT NULL DEFAULT false,
@@ -1006,8 +1009,8 @@ CREATE TABLE `network_snmp_config` (
 	CONSTRAINT `network_snmp_config_id` PRIMARY KEY(`id`),
 	CONSTRAINT `network_snmp_config_equipmentId_unique` UNIQUE(`equipmentId`)
 );
-;
-CREATE TABLE `network_snmp_ports` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `network_snmp_ports` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`ifIndex` int NOT NULL,
@@ -1034,8 +1037,8 @@ CREATE TABLE `network_snmp_ports` (
 	`net_port_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `network_snmp_ports_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `network_snmp_readings` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `network_snmp_readings` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`cpuPercent` float,
@@ -1045,28 +1048,28 @@ CREATE TABLE `network_snmp_readings` (
 	`net_reading_collected_at` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `network_snmp_readings_id` PRIMARY KEY(`id`)
 );
-;
-ALTER TABLE `network_port_readings` ADD CONSTRAINT `network_port_readings_portId_network_snmp_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `network_snmp_ports`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `network_snmp_alerts` ADD CONSTRAINT `network_snmp_alerts_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `network_snmp_alerts` ADD CONSTRAINT `network_snmp_alerts_portId_network_snmp_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `network_snmp_ports`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `network_snmp_config` ADD CONSTRAINT `network_snmp_config_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `network_snmp_ports` ADD CONSTRAINT `network_snmp_ports_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;;
+--> statement-breakpoint
+ALTER TABLE `network_port_readings` ADD CONSTRAINT `network_port_readings_portId_network_snmp_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `network_snmp_ports`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `network_snmp_alerts` ADD CONSTRAINT `network_snmp_alerts_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `network_snmp_alerts` ADD CONSTRAINT `network_snmp_alerts_portId_network_snmp_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `network_snmp_ports`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `network_snmp_config` ADD CONSTRAINT `network_snmp_config_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `network_snmp_ports` ADD CONSTRAINT `network_snmp_ports_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `network_snmp_readings` ADD CONSTRAINT `network_snmp_readings_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0047_illegal_madame_masque.sql
-ALTER TABLE `network_snmp_ports` MODIFY COLUMN `lastInOctets` bigint;;
+-- === drizzle/0047_illegal_madame_masque.sql ===
+ALTER TABLE `network_snmp_ports` MODIFY COLUMN `lastInOctets` bigint;--> statement-breakpoint
 ALTER TABLE `network_snmp_ports` MODIFY COLUMN `lastOutOctets` bigint;
--- Migration: 0047_nasty_kree.sql
-ALTER TABLE `network_snmp_ports` ADD `alertBpsMax` float;
--- Migration: 0048_bent_sentry.sql
+-- === drizzle/0047_nasty_kree.sql ===
+ALTER TABLE `network_snmp_ports` ADD IF NOT EXISTS `alertBpsMax` float;
+-- === drizzle/0048_bent_sentry.sql ===
 ALTER TABLE `network_snmp_ports` MODIFY COLUMN `ifSpeed` bigint;
--- Migration: 0048_kind_silver_fox.sql
+-- === drizzle/0048_kind_silver_fox.sql ===
 ALTER TABLE `network_snmp_alerts` MODIFY COLUMN `net_alert_type` enum('cpu_high','mem_high','temp_high','port_down','port_up','rx_power_low','rx_power_high','tx_power_low','tx_power_high','snmp_unreachable','traffic_high') NOT NULL;
--- Migration: 0049_lovely_wasp.sql
-ALTER TABLE `bgp_peers` ADD `peer_ipv6` varchar(64);;
-ALTER TABLE `bgp_peers` ADD `activate_script_v6` text;;
-ALTER TABLE `bgp_peers` ADD `deactivate_script_v6` text;
--- Migration: 0050_bouncy_smiling_tiger.sql
-CREATE TABLE `map_olt_elements` (
+-- === drizzle/0049_lovely_wasp.sql ===
+ALTER TABLE `bgp_peers` ADD IF NOT EXISTS `peer_ipv6` varchar(64);--> statement-breakpoint
+ALTER TABLE `bgp_peers` ADD IF NOT EXISTS `activate_script_v6` text;--> statement-breakpoint
+ALTER TABLE `bgp_peers` ADD IF NOT EXISTS `deactivate_script_v6` text;
+-- === drizzle/0050_bouncy_smiling_tiger.sql ===
+CREATE TABLE IF NOT EXISTS `map_olt_elements` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`equipmentId` int NOT NULL,
 	`lat` double NOT NULL,
@@ -1079,8 +1082,8 @@ CREATE TABLE `map_olt_elements` (
 	`olt_map_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `map_olt_elements_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `olt_port_fiber_links` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `olt_port_fiber_links` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`oltElementId` int NOT NULL,
 	`portId` int NOT NULL,
@@ -1093,13 +1096,13 @@ CREATE TABLE `olt_port_fiber_links` (
 	`olt_link_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `olt_port_fiber_links_id` PRIMARY KEY(`id`)
 );
-;
-ALTER TABLE `map_olt_elements` ADD CONSTRAINT `map_olt_elements_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `olt_port_fiber_links` ADD CONSTRAINT `olt_port_fiber_links_oltElementId_map_olt_elements_id_fk` FOREIGN KEY (`oltElementId`) REFERENCES `map_olt_elements`(`id`) ON DELETE cascade ON UPDATE no action;;
-ALTER TABLE `olt_port_fiber_links` ADD CONSTRAINT `olt_port_fiber_links_portId_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `ports`(`id`) ON DELETE cascade ON UPDATE no action;;
+--> statement-breakpoint
+ALTER TABLE `map_olt_elements` ADD CONSTRAINT `map_olt_elements_equipmentId_equipments_id_fk` FOREIGN KEY (`equipmentId`) REFERENCES `equipments`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `olt_port_fiber_links` ADD CONSTRAINT `olt_port_fiber_links_oltElementId_map_olt_elements_id_fk` FOREIGN KEY (`oltElementId`) REFERENCES `map_olt_elements`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `olt_port_fiber_links` ADD CONSTRAINT `olt_port_fiber_links_portId_ports_id_fk` FOREIGN KEY (`portId`) REFERENCES `ports`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `olt_port_fiber_links` ADD CONSTRAINT `olt_port_fiber_links_ceoElementId_map_elements_id_fk` FOREIGN KEY (`ceoElementId`) REFERENCES `map_elements`(`id`) ON DELETE cascade ON UPDATE no action;
--- Migration: 0051_common_gladiator.sql
-CREATE TABLE `cto_via_associations` (
+-- === drizzle/0051_common_gladiator.sql ===
+CREATE TABLE IF NOT EXISTS `cto_via_associations` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`ctoId` int NOT NULL,
 	`cto_assoc_source_type` enum('tube','splitter') NOT NULL,
@@ -1111,8 +1114,8 @@ CREATE TABLE `cto_via_associations` (
 	CONSTRAINT `cto_via_associations_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0052_daily_wendell_vaughn.sql
-CREATE TABLE `map_poles` (
+-- === drizzle/0052_daily_wendell_vaughn.sql ===
+CREATE TABLE IF NOT EXISTS `map_poles` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`reference` varchar(128),
@@ -1124,8 +1127,8 @@ CREATE TABLE `map_poles` (
 	`pole_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `map_poles_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `map_technical_reserves` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `map_technical_reserves` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`name` varchar(128) NOT NULL,
 	`sizeMeters` int NOT NULL DEFAULT 0,
@@ -1137,32 +1140,32 @@ CREATE TABLE `map_technical_reserves` (
 	`reserve_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `map_technical_reserves_id` PRIMARY KEY(`id`)
 );
-;
-ALTER TABLE `map_groups` ADD `parentId` int DEFAULT null;
--- Migration: 0053_wise_captain_midlands.sql
-ALTER TABLE `ceo_vias` ADD `fusedToSplitterId` int;;
-ALTER TABLE `ceo_vias` ADD `fusedToSplitterViaId` int;
--- Migration: 0054_equal_ben_grimm.sql
-ALTER TABLE `map_groups` MODIFY COLUMN `parentId` int;;
-ALTER TABLE `cto_tubes` ADD `cto_splitter_type` enum('balanced','unbalanced') DEFAULT 'balanced';;
-ALTER TABLE `cto_tubes` ADD `ratio` varchar(32);
--- Migration: 0055_sweet_king_cobra.sql
-CREATE TABLE `map_pole_groups` (
+--> statement-breakpoint
+ALTER TABLE `map_groups` ADD IF NOT EXISTS `parentId` int DEFAULT null;
+-- === drizzle/0053_wise_captain_midlands.sql ===
+ALTER TABLE `ceo_vias` ADD IF NOT EXISTS `fusedToSplitterId` int;--> statement-breakpoint
+ALTER TABLE `ceo_vias` ADD IF NOT EXISTS `fusedToSplitterViaId` int;
+-- === drizzle/0054_equal_ben_grimm.sql ===
+ALTER TABLE `map_groups` MODIFY COLUMN `parentId` int;--> statement-breakpoint
+ALTER TABLE `cto_tubes` ADD IF NOT EXISTS `cto_splitter_type` enum('balanced','unbalanced') DEFAULT 'balanced';--> statement-breakpoint
+ALTER TABLE `cto_tubes` ADD IF NOT EXISTS `ratio` varchar(32);
+-- === drizzle/0055_sweet_king_cobra.sql ===
+CREATE TABLE IF NOT EXISTS `map_pole_groups` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`poleId` int NOT NULL,
 	`groupId` int NOT NULL,
 	CONSTRAINT `map_pole_groups_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `map_reserve_groups` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `map_reserve_groups` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`reserveId` int NOT NULL,
 	`groupId` int NOT NULL,
 	CONSTRAINT `map_reserve_groups_id` PRIMARY KEY(`id`)
 );
 
--- Migration: 0056_map_pois.sql
-CREATE TABLE `map_pois` (
+-- === drizzle/0056_map_pois.sql ===
+CREATE TABLE IF NOT EXISTS `map_pois` (
 `id` int AUTO_INCREMENT NOT NULL,
 `name` varchar(128) NOT NULL,
 `category` varchar(64) NOT NULL DEFAULT 'geral',
@@ -1174,15 +1177,15 @@ CREATE TABLE `map_pois` (
 `poi_updated_at` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 CONSTRAINT `map_pois_id` PRIMARY KEY(`id`)
 );
-;
-CREATE TABLE `map_poi_groups` (
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `map_poi_groups` (
 `id` int AUTO_INCREMENT NOT NULL,
 `poiId` int NOT NULL,
 `groupId` int NOT NULL,
 CONSTRAINT `map_poi_groups_id` PRIMARY KEY(`id`)
 );
-;
+--> statement-breakpoint
 ALTER TABLE `map_poi_groups` ADD CONSTRAINT `map_poi_groups_poiId_map_pois_id_fk` FOREIGN KEY (`poiId`) REFERENCES `map_pois`(`id`) ON DELETE cascade ON UPDATE no action;
-;
+--> statement-breakpoint
 ALTER TABLE `map_poi_groups` ADD CONSTRAINT `map_poi_groups_groupId_map_groups_id_fk` FOREIGN KEY (`groupId`) REFERENCES `map_groups`(`id`) ON DELETE cascade ON UPDATE no action;
 

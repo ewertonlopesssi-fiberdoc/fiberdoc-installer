@@ -76,6 +76,17 @@ if [[ "$SETUP_NGINX" =~ ^[Ss]$ ]]; then
   DEFAULT_IP=$(hostname -I | awk '{print $1}')
   read -p "  Domínio ou IP para o Nginx [padrão: $DEFAULT_IP]: " NGINX_HOST
   NGINX_HOST="${NGINX_HOST:-$DEFAULT_IP}"
+
+  # Verificar se é um domínio real (não IP) para oferecer SSL
+  if echo "$NGINX_HOST" | grep -qP '^[a-zA-Z].*\.[a-zA-Z]{2,}$'; then
+    read -p "  Configurar SSL (Let's Encrypt) para $NGINX_HOST? [S/n]: " SETUP_SSL
+    SETUP_SSL="${SETUP_SSL:-S}"
+    if [[ "$SETUP_SSL" =~ ^[Ss]$ ]]; then
+      read -p "  E-mail para o certificado SSL: " SSL_EMAIL
+    fi
+  else
+    SETUP_SSL="N"
+  fi
 fi
 
 echo ""
@@ -231,11 +242,29 @@ mkdir -p "$FIBERDOC_DIR/logs"
 # Copiar arquivos compilados
 cp -r "$INSTALLER_DIR/dist/." "$FIBERDOC_DIR/dist/"
 
+# Copiar schema-base.sql e scripts de migração para /opt/fiberdoc/scripts/
+mkdir -p "$FIBERDOC_DIR/scripts"
+if [ -f "$INSTALLER_DIR/schema-full.sql" ]; then
+  cp "$INSTALLER_DIR/schema-full.sql" "$FIBERDOC_DIR/scripts/schema-base.sql"
+fi
+# Copiar scripts de atualização se existirem
+for f in "$INSTALLER_DIR"/*.sh; do
+  [ -f "$f" ] && cp "$f" "$FIBERDOC_DIR/scripts/" 2>/dev/null || true
+done
+
 # Aplicar schema do banco
 info "  Aplicando schema do banco de dados..."
 $MYSQL_CMD "$DB_NAME" < "$INSTALLER_DIR/schema-full.sql" 2>/dev/null && \
   success "Schema aplicado." || \
   warn "Algumas tabelas podem já existir (normal em reinstalação)."
+
+# Inserir usuário admin padrão com hash bcrypt correto
+info "  Criando usuário admin padrão..."
+ADMIN_HASH='\$2b\$12\$.RRDCP3jRU.v9r1FlpJCpOwiGrBGJjHVQzIPtyt43Ndt7CK7wmxs6'
+$MYSQL_CMD "$DB_NAME" -e "
+  INSERT IGNORE INTO \`users\` (openId, name, email, loginMethod, role, passwordHash, mustChangePassword)
+  VALUES ('local-admin', 'Administrador', 'admin@fiberdoc.local', 'local', 'admin', '${ADMIN_HASH}', 1);
+" 2>/dev/null && success "Usuário admin criado." || warn "Usuário admin pode já existir."
 
 success "Arquivos instalados em $FIBERDOC_DIR."
 
@@ -306,21 +335,20 @@ else
   warn "Verifique com: journalctl -u $SERVICE_NAME -n 30 --no-pager"
 fi
 
-# ─── PASSO 9: Nginx ───────────────────────────────────────────────────────────
+# # ─── PASSO 9: Nginx + SSL ─────────────────────────────────────────────
 if [[ "$SETUP_NGINX" =~ ^[Ss]$ ]]; then
   step 9 "Configurando Nginx como proxy reverso..."
 
+  # Configurar Nginx inicial (HTTP)
   cat > "/etc/nginx/sites-available/$SERVICE_NAME" <<EOF
 server {
     listen 80;
     server_name $NGINX_HOST;
-
-    # Limite de upload para backups e importações
     client_max_body_size 100M;
-
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
     access_log /var/log/nginx/$SERVICE_NAME-access.log;
     error_log  /var/log/nginx/$SERVICE_NAME-error.log;
-
     location / {
         proxy_pass http://127.0.0.1:$APP_PORT;
         proxy_http_version 1.1;
@@ -334,7 +362,6 @@ server {
         proxy_read_timeout 300s;
         proxy_connect_timeout 75s;
     }
-
     location /assets/ {
         proxy_pass http://127.0.0.1:$APP_PORT;
         add_header Cache-Control "public, max-age=86400, immutable";
@@ -347,9 +374,31 @@ EOF
 
   if nginx -t 2>/dev/null; then
     systemctl restart nginx
-    success "Nginx configurado e reiniciado."
+    success "Nginx configurado (HTTP)."
   else
     warn "Configuração do Nginx com erro. Verifique manualmente: nginx -t"
+  fi
+
+  # ─── SSL com Let's Encrypt ─────────────────────────────────────────────
+  if [[ "$SETUP_SSL" =~ ^[Ss]$ ]] && [ -n "$SSL_EMAIL" ]; then
+    info "Configurando SSL com Let's Encrypt para $NGINX_HOST..."
+
+    # Instalar certbot se necessário
+    if ! command -v certbot &>/dev/null; then
+      info "  Instalando Certbot..."
+      apt-get install -y -qq certbot python3-certbot-nginx && success "Certbot instalado."
+    fi
+
+    # Solicitar certificado
+    if certbot --nginx -d "$NGINX_HOST" --non-interactive --agree-tos --email "$SSL_EMAIL" --redirect 2>/dev/null; then
+      success "Certificado SSL obtido e Nginx atualizado com HTTPS!"
+      SSL_CONFIGURED=true
+    else
+      warn "Não foi possível obter o certificado SSL automaticamente."
+      warn "Verifique se o DNS de $NGINX_HOST aponta para este servidor e se a porta 80 está acessível."
+      warn "Para tentar novamente: certbot --nginx -d $NGINX_HOST --email $SSL_EMAIL --agree-tos"
+      SSL_CONFIGURED=false
+    fi
   fi
 fi
 
@@ -364,7 +413,11 @@ echo -e "${GREEN}${BOLD}╚═════════════════�
 echo ""
 echo -e "  ${BOLD}Acesso ao sistema:${NC}"
 if [[ "$SETUP_NGINX" =~ ^[Ss]$ ]]; then
-  echo -e "    URL:      ${CYAN}http://$NGINX_HOST${NC}"
+  if [ "${SSL_CONFIGURED:-false}" = "true" ]; then
+    echo -e "    URL:      ${CYAN}https://$NGINX_HOST${NC}  ${GREEN}(SSL ativo)${NC}"
+  else
+    echo -e "    URL:      ${CYAN}http://$NGINX_HOST${NC}"
+  fi
 else
   echo -e "    URL:      ${CYAN}http://$(hostname -I | awk '{print $1}'):$APP_PORT${NC}"
 fi

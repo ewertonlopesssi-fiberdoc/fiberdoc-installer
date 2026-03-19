@@ -8,7 +8,7 @@
 # ============================================================
 set -e
 
-REPO="ewertonlopesssi-fiberdoc/fiberdoc-installer"
+REPO="ewertonlopesssi-fiberdoc/fiberdoc-source"
 APP_DIR="/opt/fiberdoc"
 TMP_DIR="/tmp/fiberdoc-update-$$"
 
@@ -39,17 +39,17 @@ if [ -f "$APP_DIR/package.json" ]; then
 fi
 info "Versão instalada: ${BOLD}$INSTALLED_VERSION${NC}"
 
-# ── 3. Buscar versão mais recente no GitHub ──────────────────
+# # ── 3. Buscar versão mais recente no GitHub ──────────────
 info "Verificando versão mais recente no GitHub..."
-API_RESPONSE=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null)
-LATEST=$(echo "$API_RESPONSE" | grep '"tag_name"' | head -1 \
-  | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+# Buscar versão via package.json do branch main
+LATEST_VERSION=$(curl -fsSL "https://raw.githubusercontent.com/$REPO/main/package.json" 2>/dev/null \
+  | grep '"version"' | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
 
-if [ -z "$LATEST" ]; then
+if [ -z "$LATEST_VERSION" ]; then
   err "Não foi possível obter a versão mais recente. Verifique a conexão com a internet."
 fi
 
-LATEST_VERSION="${LATEST#v}"
+LATEST="v$LATEST_VERSION"
 info "Versão mais recente: ${BOLD}$LATEST${NC}"
 
 # ── 4. Verificar se já está atualizado ──────────────────────
@@ -81,18 +81,27 @@ info "Criando backup em $BACKUP_DIR ..."
 mkdir -p "$BACKUP_DIR"
 cp "$APP_DIR/dist/index.js" "$BACKUP_DIR/" 2>/dev/null || true
 cp -r "$APP_DIR/dist/public" "$BACKUP_DIR/" 2>/dev/null || true
-log "Backup criado"
-
-# ── 7. Baixar pacote de atualização ─────────────────────────
-ZIP_NAME="fiberdoc-update-${LATEST_VERSION}.zip"
-ZIP_URL="https://github.com/$REPO/releases/download/$LATEST/$ZIP_NAME"
+log "Backup criado"# ── 7. Baixar pacote de atualização ─────────────────────────────
+# Tentar obter a data do release para montar o nome do arquivo
+# Formato: fiberdoc-vX.Y.Z-YYYYMMDD.zip
 mkdir -p "$TMP_DIR"
-info "Baixando $ZIP_NAME ..."
+
+# Buscar lista de releases para encontrar o ZIP correto
+info "Buscando pacote de atualização..."
+RELEASE_FILES=$(curl -fsSL "https://api.github.com/repos/$REPO/contents/releases" 2>/dev/null \
+  | grep '"name"' | grep -o 'fiberdoc-v[0-9.]*-[0-9]*.zip' | sort -V | tail -1)
+
+if [ -z "$RELEASE_FILES" ]; then
+  # Fallback: tentar URL direta com data de hoje
+  TODAY=$(date +%Y%m%d)
+  RELEASE_FILES="fiberdoc-v${LATEST_VERSION}-${TODAY}.zip"
+fi
+
+ZIP_URL="https://raw.githubusercontent.com/$REPO/main/releases/$RELEASE_FILES"
+info "Baixando $RELEASE_FILES ..."
 curl -fsSL "$ZIP_URL" -o "$TMP_DIR/update.zip" \
   || err "Falha ao baixar o pacote. Verifique: $ZIP_URL"
-log "Pacote baixado"
-
-# ── 8. Extrair e aplicar ─────────────────────────────────────
+log "Pacote baixado"# ── 8. Extrair e aplicar ─────────────────────────────────────
 info "Extraindo pacote..."
 unzip -q "$TMP_DIR/update.zip" -d "$TMP_DIR/extracted"
 
